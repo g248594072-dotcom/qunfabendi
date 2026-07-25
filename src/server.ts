@@ -23,6 +23,7 @@ import {
   proxyNovncUpgrade,
 } from "./novnc-proxy.js";
 import { packAccountProfile, unpackAccountProfile } from "./profile-pack.js";
+import { packSyncBundle, unpackSyncBundle } from "./sync-pack.js";
 import { saveSettings, type AppSettings } from "./settings.js";
 import {
   getDashboardState,
@@ -407,6 +408,28 @@ const server = http.createServer(async (req, res) => {
       await markAccountLoggedIn(id, true);
       pushLog(`已导入账号 ${id} 的登录资料 → ${dir}`);
       sendJson(res, 200, { ok: true, profileDir: dir });
+      return;
+    }
+
+    /** 一键导出：账号+登录态+主页客户黑名单设置（本机准备 → 服务器发送） */
+    if (req.method === "GET" && pathname === "/api/sync/export") {
+      const packed = await packSyncBundle();
+      pushLog(`已导出同步包 ${packed.fileName}（${Math.round(packed.buffer.length / 1024)} KB）`);
+      res.writeHead(200, {
+        "Content-Type": "application/gzip",
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(packed.fileName)}"`,
+        "Cache-Control": "no-store",
+      });
+      res.end(packed.buffer);
+      return;
+    }
+
+    /** 一键导入同步包 */
+    if (req.method === "POST" && pathname === "/api/sync/import") {
+      const buf = await readBodyBuffer(req);
+      const result = await unpackSyncBundle(buf);
+      pushLog(`已导入同步包：${result.restored.join("、")}`);
+      sendJson(res, 200, { ok: true, ...result });
       return;
     }
 

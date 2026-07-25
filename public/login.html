@@ -3,24 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Facebook 登录助手</title>
-    <link rel="stylesheet" href="/styles.css?v=18" />
+    <title>Facebook 登录助手（本机）</title>
+    <link rel="stylesheet" href="/styles.css?v=19" />
   </head>
   <body>
     <div class="app helper-app">
       <header class="top">
         <div>
           <h1>Facebook 登录助手</h1>
-          <p class="sub">只需三步：添加账号 → 设置代理 IP → 登录。登录信息会自动保存在服务器。</p>
+          <p class="sub">
+            建议在本机使用：添加账号 →（可选）设代理 → 打开登录（本机会弹出浏览器）→ 确认已登录 → 一键导出。
+          </p>
         </div>
         <div class="status" id="runStatus">空闲</div>
       </header>
 
       <section class="hint">
-        <strong>操作步骤：</strong>
-        ① 添加账号 &nbsp;→&nbsp;
-        ②（可选）设置代理 IP；不设则用服务器本机出口 &nbsp;→&nbsp;
-        ③ 打开登录 → 远程浏览器里登 Facebook →「确认已登录」
+        <strong>推荐流程：</strong>
+        本机完成登录与准备 → 点「一键导出全部」下载资料包 → 到服务器控制台「一键导入」→ 服务器只做「真正发送」。
       </section>
 
       <section class="panel">
@@ -37,8 +37,8 @@
       </section>
 
       <section class="panel" id="novncPanel" hidden>
-        <h2>远程浏览器</h2>
-        <p class="note">点「打开登录」时会自动弹出；也可手动打开后在里面操作 Facebook。</p>
+        <h2>远程浏览器（仅服务器需要）</h2>
+        <p class="note">本机登录时一般不用这个；服务器上才需要远程桌面。</p>
         <div class="helper-actions">
           <a id="novncLink" class="button-link primary" href="#" target="_blank" rel="noopener">
             打开远程浏览器
@@ -47,10 +47,13 @@
       </section>
 
       <section class="panel">
-        <h2>2. 账号列表（设置 IP 并登录）</h2>
+        <h2>2. 账号列表</h2>
         <div class="helper-actions sticky-confirm" style="margin-bottom: 12px">
+          <button type="button" id="btnExportAll" class="accent">
+            一键导出全部（上传服务器用）
+          </button>
           <button type="button" id="btnLoginConfirm" class="primary" hidden>
-            确认已登录（保存到服务器）
+            确认已登录（保存到本机）
           </button>
           <button type="button" id="btnResetJob" class="danger">解除卡住</button>
         </div>
@@ -71,7 +74,7 @@
       <div class="modal-backdrop" data-close-proxy></div>
       <div class="modal-card" role="dialog" aria-labelledby="proxyModalTitle">
         <h3 id="proxyModalTitle">设置代理 IP</h3>
-        <p class="note">按代理商面板填写（与 kookeey 等一致）。</p>
+        <p class="note">按代理商面板填写（与 kookeey 等一致）。不设则用本机出口。</p>
         <div class="proxy-form">
           <label>
             协议
@@ -107,6 +110,6 @@
       </div>
     </div>
 
-    <script src="/login-helper.js?v=18"></script>
+    <script src="/login-helper.js?v=19"></script>
   </body>
 </html>

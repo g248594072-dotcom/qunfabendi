@@ -20,6 +20,7 @@ const els = {
   btnProxySave: document.getElementById("btnProxySave"),
   btnProxyClear: document.getElementById("btnProxyClear"),
   btnCopyLogs: document.getElementById("btnCopyLogs"),
+  btnExportAll: document.getElementById("btnExportAll"),
 };
 
 let proxyEditAccountId = "";
@@ -202,7 +203,8 @@ async function refresh() {
     if (els.logs) els.logs.textContent = (data.logs || []).join("\n") || "暂无日志";
 
     if (els.novncPanel && els.novncLink) {
-      if (data.novncUrl) {
+      // 本机有界面弹出时不必显示远程桌面；仅服务器模式显示
+      if (data.serverMode && data.novncUrl) {
         els.novncPanel.hidden = false;
         els.novncLink.href = data.novncUrl;
       } else {
@@ -221,7 +223,13 @@ async function refresh() {
 }
 
 async function startLogin(accountId) {
-  if (els.novncLink?.href && els.novncLink.href !== "#") {
+  // 仅服务器模式才自动打开远程桌面；本机会直接弹出 Chrome 窗口
+  if (
+    els.novncPanel &&
+    !els.novncPanel.hidden &&
+    els.novncLink?.href &&
+    els.novncLink.href !== "#"
+  ) {
     window.open(els.novncLink.href, "_blank", "noopener");
   }
   const res = await fetch("/api/job/login", {
@@ -231,6 +239,11 @@ async function startLogin(accountId) {
   });
   const data = await res.json();
   if (data.error) alert(data.error);
+  else {
+    alert(
+      "已开始打开浏览器。\n\n本机：请到任务栏找新弹出的 Chrome/Chromium 窗口登录。\n服务器：请点「打开远程浏览器」。\n\n登进消息框后，回到本页点「确认已登录」。",
+    );
+  }
   await refresh();
 }
 
@@ -348,6 +361,11 @@ async function copyText(text, btn) {
 
 els.btnCopyLogs?.addEventListener("click", () => {
   copyText(els.logs?.textContent || "", els.btnCopyLogs);
+});
+
+els.btnExportAll?.addEventListener("click", () => {
+  // 走下载链接，包含账号+登录态+主页客户等，供服务器导入后发送
+  window.location.href = "/api/sync/export";
 });
 
 refresh();

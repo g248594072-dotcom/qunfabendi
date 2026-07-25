@@ -563,6 +563,16 @@ a.button-link.primary:hover {
   filter: brightness(1.05);
 }
 
+a.button-link.accent {
+  background: #2f5d8a;
+  border-color: #2f5d8a;
+  color: #fff;
+}
+
+a.button-link.accent:hover {
+  filter: brightness(1.05);
+}
+
 @media (max-width: 860px) {
   .grid,
   .row,

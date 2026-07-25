@@ -41,7 +41,43 @@ const els = {
   btnProxyClear: document.getElementById("btnProxyClear"),
   btnOpenLoginHelper: document.getElementById("btnOpenLoginHelper"),
   serverModeHint: document.getElementById("serverModeHint"),
+  btnImportSync: document.getElementById("btnImportSync"),
+  syncFile: document.getElementById("syncFile"),
+  syncMsg: document.getElementById("syncMsg"),
 };
+
+els.btnImportSync?.addEventListener("click", () => {
+  els.syncFile?.click();
+});
+
+els.syncFile?.addEventListener("change", async () => {
+  const file = els.syncFile.files?.[0];
+  if (!file) return;
+  if (els.syncMsg) els.syncMsg.textContent = "正在导入…";
+  try {
+    const res = await fetch("/api/sync/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/gzip" },
+      body: file,
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (els.syncMsg) {
+      els.syncMsg.textContent = `导入成功：${(data.restored || []).join("、")}`;
+    }
+    alert("资料包已导入。请勾选无头模式并保存，然后可进行发送。");
+    lastPagesKey = "";
+    lastAccountsKey = "";
+    settingsHydrated = false;
+    await refresh();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (els.syncMsg) els.syncMsg.textContent = "导入失败：" + msg;
+    alert(msg);
+  } finally {
+    els.syncFile.value = "";
+  }
+});
 
 /** 当前正在编辑代理的账号 id */
 let proxyEditAccountId = "";

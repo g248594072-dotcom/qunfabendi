@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>主页群发控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=15" />
+    <link rel="stylesheet" href="/styles.css?v=19" />
   </head>
   <body>
     <div class="app">
@@ -17,12 +17,26 @@
       </header>
 
       <section class="hint">
-        <strong>流程：</strong>添加多个 Facebook 账号（各用独立浏览器资料夹 + 独立代理 IP）→
-        登录（本机 / <a href="/login.html" target="_blank" rel="noopener">登录助手</a> /
-        服务器 noVNC）→ 探测主页 → 勾选 → 黑名单 → 同步客户 → 发送。<br />
-        黑名单标签：<code id="tagList"></code> · 键：
-        <code>page_id + 客户名</code>
-        <span id="serverModeHint" hidden><br /><strong>服务器模式：</strong>发送请勾选「无头模式」；登录请用登录助手 + 远程浏览器，或导入资料包。</span>
+        <strong>推荐分工：</strong>
+        <b>本机</b>做登录 / 同步主页 / 探测 / 黑名单 / 同步客户 →
+        「一键导出」→
+        <b>服务器</b>「一键导入」→ 勾选无头 → 只做「⑥ 真正发送」。<br />
+        登录助手：<a href="/login.html" target="_blank" rel="noopener">/login.html</a>
+        · 黑名单标签：<code id="tagList"></code>
+        <span id="serverModeHint" hidden><br /><strong>服务器模式：</strong>请勾选「无头模式」；用下方「一键导入」接收本机资料包后发送。</span>
+      </section>
+
+      <section class="panel">
+        <h2>本机 ↔ 服务器 资料同步</h2>
+        <p class="note">
+          导出包含：账号、代理、登录态、主页、客户、黑名单、设置。导入后即可在服务器发送。
+        </p>
+        <div class="actions">
+          <a class="button-link accent" href="/api/sync/export">一键导出全部资料包</a>
+          <button type="button" id="btnImportSync" class="primary">一键导入资料包</button>
+          <input id="syncFile" type="file" accept=".gz,.tar.gz,application/gzip" hidden />
+        </div>
+        <p class="note" id="syncMsg"></p>
       </section>
 
       <section class="panel">
@@ -217,6 +231,6 @@
       </div>
     </div>
 
-    <script src="/app.js?v=15"></script>
+    <script src="/app.js?v=19"></script>
   </body>
 </html>

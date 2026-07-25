@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>主页群发控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=13" />
+    <link rel="stylesheet" href="/styles.css?v=15" />
   </head>
   <body>
     <div class="app">
@@ -17,17 +17,20 @@
       </header>
 
       <section class="hint">
-        <strong>流程：</strong>添加多个 Facebook 账号（各用独立浏览器资料夹，类似 Chrome
-        个人资料）→ 登录全部 / 探测全部并汇总主页 → 勾选可管理页 → 更新黑名单 →
-        同步客户 → 发送（按主页所属账号自动开对应浏览器）。<br />
+        <strong>流程：</strong>添加多个 Facebook 账号（各用独立浏览器资料夹 + 独立代理 IP）→
+        登录（本机 / <a href="/login.html" target="_blank" rel="noopener">登录助手</a> /
+        服务器 noVNC）→ 探测主页 → 勾选 → 黑名单 → 同步客户 → 发送。<br />
         黑名单标签：<code id="tagList"></code> · 键：
         <code>page_id + 客户名</code>
+        <span id="serverModeHint" hidden><br /><strong>服务器模式：</strong>发送请勾选「无头模式」；登录请用登录助手 + 远程浏览器，或导入资料包。</span>
       </section>
 
       <section class="panel">
-        <h2>0. Facebook 账号（多资料夹）</h2>
+        <h2>0. Facebook 账号（多资料夹 + 独立 IP）</h2>
         <p class="note">
-          每个账号对应独立资料夹（类似 Chrome 个人资料）。需要换 IP 时在账号旁点「代理IP」设置；登录/探测/发送都会走该账号代理。
+          每个账号独立资料夹 + 独立代理 IP（SOCKS5 / HTTP）。先点「代理IP」按代理商面板填写，再交给他人在
+          <a href="/login.html" target="_blank" rel="noopener">登录助手</a>
+          里完成登录。登录/探测/发送都会走该账号自己的出口 IP。
         </p>
         <div id="accountList" class="account-list"></div>
         <div class="row account-add">
@@ -35,8 +38,13 @@
             新账号名称
             <input id="newAccountName" type="text" placeholder="例如 out / 高炎" />
           </label>
+          <label>
+            登录负责人（可空）
+            <input id="newAccountAssignee" type="text" placeholder="例如 小王" />
+          </label>
           <div class="account-add-actions">
             <button type="button" id="btnAddAccount" class="primary">添加账号</button>
+            <button type="button" id="btnOpenLoginHelper" class="accent">打开登录助手</button>
           </div>
         </div>
       </section>
@@ -168,6 +176,47 @@
         </section>
       </div>
     </div>
-    <script src="/app.js?v=12"></script>
+
+    <div id="proxyModal" class="modal" hidden>
+      <div class="modal-backdrop" data-close-proxy></div>
+      <div class="modal-card" role="dialog" aria-labelledby="proxyModalTitle">
+        <h3 id="proxyModalTitle">设置代理 IP</h3>
+        <p class="note">按代理商面板填写（协议 / 域名或 IP / 端口 / 账号 / 密码），与 kookeey 等一致。</p>
+        <div class="proxy-form">
+          <label>
+            协议
+            <select id="proxyProtocol">
+              <option value="socks5">socks5</option>
+              <option value="http">http</option>
+              <option value="https">https</option>
+            </select>
+          </label>
+          <label>
+            服务器地址（域名或 IP）
+            <input id="proxyHost" type="text" placeholder="例如 us234.kookeey.info" autocomplete="off" />
+          </label>
+          <label>
+            端口号
+            <input id="proxyPort" type="number" min="1" max="65535" placeholder="例如 31156" />
+          </label>
+          <label>
+            账号
+            <input id="proxyUser" type="text" placeholder="代理用户名" autocomplete="off" />
+          </label>
+          <label>
+            密码
+            <input id="proxyPass" type="text" placeholder="代理密码" autocomplete="off" />
+          </label>
+        </div>
+        <p class="note" id="proxyPreview"></p>
+        <div class="modal-actions">
+          <button type="button" id="btnProxyClear" class="danger">清除（直连）</button>
+          <button type="button" data-close-proxy>取消</button>
+          <button type="button" id="btnProxySave" class="primary">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js?v=15"></script>
   </body>
 </html>

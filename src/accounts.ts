@@ -4,6 +4,8 @@ import { config } from "./config.js";
 import { normalizeProxy, type ProxyConfig } from "./proxy.js";
 import { ensureDir } from "./utils/delay.js";
 
+export type LoginStatus = "pending" | "logged_in";
+
 export type FbAccount = {
   id: string;
   name: string;
@@ -12,6 +14,12 @@ export type FbAccount = {
   createdAt: string;
   /** 该账号默认出口 IP（登录/探测/发送默认走此代理；主页可再覆盖） */
   proxy?: ProxyConfig;
+  /** 登录交接：pending=待他人登录；logged_in=已确认登录 */
+  loginStatus?: LoginStatus;
+  /** 最近一次确认登录时间 */
+  lastLoginAt?: string;
+  /** 负责登录的人（备注，便于交接） */
+  assignee?: string;
 };
 
 export type AccountsFile = {
@@ -90,7 +98,10 @@ export async function getActiveAccount(): Promise<FbAccount> {
   );
 }
 
-export async function addAccount(name: string): Promise<AccountsFile> {
+export async function addAccount(
+  name: string,
+  opts?: { proxy?: ProxyConfig | null; assignee?: string },
+): Promise<AccountsFile> {
   const file = await loadAccounts();
   const id = `acc_${Date.now().toString(36)}`;
   const safe = name.trim() || `账号${file.accounts.length + 1}`;
@@ -99,7 +110,12 @@ export async function addAccount(name: string): Promise<AccountsFile> {
     name: safe,
     profileDir: path.join("storage", "profiles", id),
     createdAt: new Date().toISOString(),
+    loginStatus: "pending",
   };
+  const proxy = normalizeProxy(opts?.proxy);
+  if (proxy) account.proxy = proxy;
+  const assignee = String(opts?.assignee || "").trim();
+  if (assignee) account.assignee = assignee;
   file.accounts.push(account);
   file.activeAccountId = id;
   await saveAccounts(file);
@@ -152,6 +168,38 @@ export async function setAccountProxy(
   const n = normalizeProxy(proxy);
   if (n) a.proxy = n;
   else delete a.proxy;
+  await saveAccounts(file);
+  return file;
+}
+
+export async function setAccountAssignee(
+  id: string,
+  assignee?: string | null,
+): Promise<AccountsFile> {
+  const file = await loadAccounts();
+  const a = file.accounts.find((x) => x.id === id);
+  if (!a) throw new Error(`找不到账号：${id}`);
+  const v = String(assignee || "").trim();
+  if (v) a.assignee = v;
+  else delete a.assignee;
+  await saveAccounts(file);
+  return file;
+}
+
+export async function markAccountLoggedIn(
+  id: string,
+  loggedIn = true,
+): Promise<AccountsFile> {
+  const file = await loadAccounts();
+  const a = file.accounts.find((x) => x.id === id);
+  if (!a) throw new Error(`找不到账号：${id}`);
+  if (loggedIn) {
+    a.loginStatus = "logged_in";
+    a.lastLoginAt = new Date().toISOString();
+  } else {
+    a.loginStatus = "pending";
+    delete a.lastLoginAt;
+  }
   await saveAccounts(file);
   return file;
 }

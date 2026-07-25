@@ -28,7 +28,54 @@ const els = {
   btnResetJob: document.getElementById("btnResetJob"),
   accountList: document.getElementById("accountList"),
   newAccountName: document.getElementById("newAccountName"),
+  newAccountAssignee: document.getElementById("newAccountAssignee"),
+  proxyModal: document.getElementById("proxyModal"),
+  proxyModalTitle: document.getElementById("proxyModalTitle"),
+  proxyProtocol: document.getElementById("proxyProtocol"),
+  proxyHost: document.getElementById("proxyHost"),
+  proxyPort: document.getElementById("proxyPort"),
+  proxyUser: document.getElementById("proxyUser"),
+  proxyPass: document.getElementById("proxyPass"),
+  proxyPreview: document.getElementById("proxyPreview"),
+  btnProxySave: document.getElementById("btnProxySave"),
+  btnProxyClear: document.getElementById("btnProxyClear"),
+  btnOpenLoginHelper: document.getElementById("btnOpenLoginHelper"),
+  serverModeHint: document.getElementById("serverModeHint"),
 };
+
+/** 当前正在编辑代理的账号 id */
+let proxyEditAccountId = "";
+/** 正在导入资料包的账号 id */
+let uploadProfileAccountId = "";
+
+const profileFileInput = document.createElement("input");
+profileFileInput.type = "file";
+profileFileInput.accept = ".gz,.tar.gz,application/gzip";
+profileFileInput.hidden = true;
+document.body.appendChild(profileFileInput);
+
+profileFileInput.addEventListener("change", async () => {
+  const file = profileFileInput.files?.[0];
+  const id = uploadProfileAccountId;
+  uploadProfileAccountId = "";
+  if (!file || !id) return;
+  try {
+    const res = await fetch(`/api/accounts/${encodeURIComponent(id)}/profile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/gzip" },
+      body: file,
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    alert("资料包已导入");
+    lastAccountsKey = "";
+    await refresh();
+  } catch (err) {
+    alert(err instanceof Error ? err.message : String(err));
+  } finally {
+    profileFileInput.value = "";
+  }
+});
 
 let settingsHydrated = false;
 let lastPagesKey = "";
@@ -164,9 +211,17 @@ function renderAccounts(accountsFile) {
   els.accountList.innerHTML = accounts
     .map((a) => {
       const isActive = a.id === active;
-      const proxyText = a.proxy?.server
-        ? `代理 ${a.proxy.server}${a.proxy.username ? " · " + a.proxy.username : ""}`
-        : "直连（未设代理）";
+      const structured = parseProxyStructured(a.proxy);
+      const proxyText = structured
+        ? `${structured.protocol}://${structured.host}:${structured.port}${
+            structured.username ? " · " + structured.username : ""
+          }`
+        : a.proxy?.server
+          ? a.proxy.server
+          : "直连（未设代理）";
+      const status = a.loginStatus === "logged_in" ? "logged_in" : "pending";
+      const statusLabel = status === "logged_in" ? "已登录" : "待登录";
+      const assignee = a.assignee ? `负责人 ${a.assignee}` : "";
       return `<div class="account-item ${isActive ? "active" : ""}" data-id="${escapeHtml(a.id)}">
         <label class="check" style="margin:0">
           <input type="radio" name="activeAccount" value="${escapeHtml(a.id)}" ${
@@ -174,13 +229,16 @@ function renderAccounts(accountsFile) {
           } />
           <span class="acc-name">${escapeHtml(a.name)}${
             isActive ? "（当前）" : ""
-          }</span>
+          }<span class="login-status ${status}">${statusLabel}</span></span>
         </label>
-        <span class="acc-meta">${escapeHtml(proxyText)}<br />${escapeHtml(
-          a.profileDir || "",
-        )}</span>
+        <span class="acc-meta">${escapeHtml(proxyText)}${
+          assignee ? "<br />" + escapeHtml(assignee) : ""
+        }</span>
         <div class="acc-actions">
           <button type="button" data-acc-proxy="${escapeHtml(a.id)}">代理IP</button>
+          <button type="button" data-acc-assignee="${escapeHtml(a.id)}">负责人</button>
+          <a class="button-link" style="padding:6px 10px;font-size:0.85rem" href="/api/accounts/${encodeURIComponent(a.id)}/profile">导出资料</a>
+          <button type="button" data-acc-upload="${escapeHtml(a.id)}">导入资料</button>
           <button type="button" data-acc-rename="${escapeHtml(a.id)}">改名</button>
           <button type="button" data-acc-remove="${escapeHtml(
             a.id,
@@ -191,20 +249,75 @@ function renderAccounts(accountsFile) {
     .join("");
 }
 
-/** 弹窗收集代理；空 server 表示清除 */
-function promptProxy(title, current) {
-  const server = prompt(
-    `${title}\n代理地址（http://ip:port 或 socks5://ip:port）\n留空=清除/直连`,
-    current?.server || "",
-  );
-  if (server === null) return undefined; // 取消
-  if (!String(server).trim()) return null; // 清除
-  const username = prompt("代理用户名（可空）", current?.username || "") ?? "";
-  const password = prompt("代理密码（可空）", current?.password || "") ?? "";
+function parseProxyStructured(proxy) {
+  const server = String(proxy?.server || "").trim();
+  if (!server) return null;
+  try {
+    const raw = server.includes("://") ? server : `http://${server}`;
+    const u = new URL(raw);
+    const protocol = (u.protocol.replace(":", "") || "socks5").toLowerCase();
+    const host = u.hostname;
+    const port = Number(u.port);
+    if (!host || !port) return null;
+    return {
+      protocol:
+        protocol === "http" || protocol === "https" || protocol === "socks5"
+          ? protocol
+          : "socks5",
+      host,
+      port,
+      username: proxy?.username || "",
+      password: proxy?.password || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function updateProxyPreview() {
+  if (!els.proxyPreview) return;
+  const protocol = els.proxyProtocol?.value || "socks5";
+  const host = (els.proxyHost?.value || "").trim();
+  const port = (els.proxyPort?.value || "").trim();
+  const user = (els.proxyUser?.value || "").trim();
+  if (!host || !port) {
+    els.proxyPreview.textContent = "预览：请填写服务器地址与端口";
+    return;
+  }
+  els.proxyPreview.textContent = `预览：${protocol}://${host}:${port}${
+    user ? " · 账号 " + user : ""
+  }`;
+}
+
+function openProxyModal(accountId, current) {
+  proxyEditAccountId = accountId;
+  const s = parseProxyStructured(current);
+  if (els.proxyProtocol) els.proxyProtocol.value = s?.protocol || "socks5";
+  if (els.proxyHost) els.proxyHost.value = s?.host || "";
+  if (els.proxyPort) els.proxyPort.value = s?.port ? String(s.port) : "";
+  if (els.proxyUser) els.proxyUser.value = s?.username || current?.username || "";
+  if (els.proxyPass) els.proxyPass.value = s?.password || current?.password || "";
+  updateProxyPreview();
+  if (els.proxyModal) els.proxyModal.hidden = false;
+}
+
+function closeProxyModal() {
+  proxyEditAccountId = "";
+  if (els.proxyModal) els.proxyModal.hidden = true;
+}
+
+function collectStructuredProxy() {
+  const host = (els.proxyHost?.value || "").trim();
+  const port = Number(els.proxyPort?.value);
+  if (!host || !Number.isFinite(port) || port <= 0) {
+    throw new Error("请填写服务器地址和有效端口");
+  }
   return {
-    server: String(server).trim(),
-    username: String(username).trim() || undefined,
-    password: String(password).trim() || undefined,
+    protocol: els.proxyProtocol?.value || "socks5",
+    host,
+    port: Math.floor(port),
+    username: (els.proxyUser?.value || "").trim() || undefined,
+    password: (els.proxyPass?.value || "").trim() || undefined,
   };
 }
 
@@ -245,9 +358,16 @@ async function refresh() {
 
     running = Boolean(data.running);
 
+    if (els.serverModeHint) {
+      els.serverModeHint.hidden = !data.serverMode;
+    }
+
     if (!settingsHydrated) {
       fillSettings(data.settings);
       settingsHydrated = true;
+      if (data.serverMode && els.headless && !els.headless.checked) {
+        // 仅首次提示，不强制改用户已保存的设置
+      }
     }
 
     if (els.tagList && Array.isArray(data.blacklistTags)) {
@@ -392,8 +512,55 @@ async function postAccounts(body) {
 document.getElementById("btnAddAccount")?.addEventListener("click", async () => {
   try {
     const name = (els.newAccountName?.value || "").trim();
-    await postAccounts({ action: "add", name });
+    const assignee = (els.newAccountAssignee?.value || "").trim();
+    await postAccounts({ action: "add", name, assignee: assignee || undefined });
     if (els.newAccountName) els.newAccountName.value = "";
+    if (els.newAccountAssignee) els.newAccountAssignee.value = "";
+  } catch (err) {
+    alert(err instanceof Error ? err.message : String(err));
+  }
+});
+
+els.btnOpenLoginHelper?.addEventListener("click", () => {
+  window.open("/login.html", "_blank", "noopener");
+});
+
+["proxyProtocol", "proxyHost", "proxyPort", "proxyUser", "proxyPass"].forEach(
+  (id) => {
+    els[id]?.addEventListener("input", updateProxyPreview);
+    els[id]?.addEventListener("change", updateProxyPreview);
+  },
+);
+
+els.proxyModal?.addEventListener("click", (ev) => {
+  if (ev.target?.closest?.("[data-close-proxy]")) closeProxyModal();
+});
+
+els.btnProxySave?.addEventListener("click", async () => {
+  if (!proxyEditAccountId) return;
+  try {
+    const structuredProxy = collectStructuredProxy();
+    await postAccounts({
+      action: "setProxy",
+      id: proxyEditAccountId,
+      structuredProxy,
+    });
+    closeProxyModal();
+  } catch (err) {
+    alert(err instanceof Error ? err.message : String(err));
+  }
+});
+
+els.btnProxyClear?.addEventListener("click", async () => {
+  if (!proxyEditAccountId) return;
+  if (!confirm("清除该账号代理，改为直连？")) return;
+  try {
+    await postAccounts({
+      action: "setProxy",
+      id: proxyEditAccountId,
+      proxy: null,
+    });
+    closeProxyModal();
   } catch (err) {
     alert(err instanceof Error ? err.message : String(err));
   }
@@ -416,21 +583,41 @@ els.accountList?.addEventListener("click", async (ev) => {
   const renameId = btn.getAttribute("data-acc-rename");
   const removeId = btn.getAttribute("data-acc-remove");
   const proxyId = btn.getAttribute("data-acc-proxy");
+  const assigneeId = btn.getAttribute("data-acc-assignee");
+  const uploadId = btn.getAttribute("data-acc-upload");
   try {
     if (renameId) {
       const name = prompt("新名称");
       if (!name) return;
       await postAccounts({ action: "rename", id: renameId, name });
+    } else if (uploadId) {
+      uploadProfileAccountId = uploadId;
+      profileFileInput.click();
     } else if (removeId) {
       if (!confirm("删除该账号记录？（资料夹文件不会自动删）")) return;
       await postAccounts({ action: "remove", id: removeId });
+    } else if (assigneeId) {
+      const res = await fetch("/api/state");
+      const data = await res.json();
+      const acc = (data.accounts?.accounts || []).find((a) => a.id === assigneeId);
+      const next = prompt(
+        "登录负责人（留空清除）",
+        acc?.assignee || "",
+      );
+      if (next === null) return;
+      await postAccounts({
+        action: "setAssignee",
+        id: assigneeId,
+        assignee: next.trim() || null,
+      });
     } else if (proxyId) {
       const res = await fetch("/api/state");
       const data = await res.json();
       const acc = (data.accounts?.accounts || []).find((a) => a.id === proxyId);
-      const next = promptProxy(`账号「${acc?.name || proxyId}」默认代理`, acc?.proxy);
-      if (next === undefined) return;
-      await postAccounts({ action: "setProxy", id: proxyId, proxy: next });
+      if (els.proxyModalTitle) {
+        els.proxyModalTitle.textContent = `设置代理 IP · ${acc?.name || proxyId}`;
+      }
+      openProxyModal(proxyId, acc?.proxy);
     }
   } catch (err) {
     alert(err instanceof Error ? err.message : String(err));

@@ -1,0 +1,47 @@
+# 有域名时用这份（把 your.domain.com 换成真实域名）
+# HTTPS 建议用 certbot：
+#   apt install certbot python3-certbot-nginx
+#   certbot --nginx -d your.domain.com
+
+upstream fb_ui {
+    server 127.0.0.1:3789;
+}
+
+upstream fb_novnc {
+    server 127.0.0.1:6080;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name your.domain.com;
+
+    location / {
+        proxy_pass http://fb_ui;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        client_max_body_size 220m;
+    }
+
+    location /novnc/ {
+        proxy_pass http://fb_novnc/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+    }
+
+    location /websockify {
+        proxy_pass http://fb_novnc/websockify;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+}

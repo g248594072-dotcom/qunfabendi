@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Facebook 登录助手</title>
+    <link rel="stylesheet" href="/styles.css?v=15" />
+  </head>
+  <body>
+    <div class="app helper-app">
+      <header class="top">
+        <div>
+          <h1>Facebook 登录助手</h1>
+          <p class="sub">
+            服务器部署版：每个账号走独立代理 IP。在远程桌面里完成登录，或上传本机已登录的资料包。
+          </p>
+        </div>
+        <div class="status" id="runStatus">空闲</div>
+      </header>
+
+      <section class="hint" id="serverHint">
+        <strong>两种登录方式：</strong><br />
+        A. <b>远程桌面</b>：点「打开远程浏览器」→ 再点账号的「打开登录」→ 在远程桌面里登 Facebook →「确认已登录」<br />
+        B. <b>资料包</b>：在能弹浏览器的电脑上登录并导出 .tar.gz → 在此「上传资料包」
+      </section>
+
+      <section class="panel" id="novncPanel" hidden>
+        <h2>远程浏览器桌面</h2>
+        <p class="note">登录时浏览器在服务器上弹出，通过下面链接查看并操作（noVNC）。</p>
+        <div class="helper-actions">
+          <a id="novncLink" class="button-link primary" href="#" target="_blank" rel="noopener">
+            打开远程浏览器
+          </a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>待登录账号</h2>
+        <div class="helper-actions" style="margin-bottom: 12px">
+          <button type="button" id="btnLoginConfirm" class="primary" hidden>
+            确认已登录
+          </button>
+          <button type="button" id="btnResetJob" class="danger">解除卡住</button>
+        </div>
+        <div id="accountList"></div>
+        <p class="note" id="emptyHint" hidden>暂无账号。请管理员先在主控制台添加账号并设置代理。</p>
+        <input id="profileFile" type="file" accept=".gz,.tar.gz,application/gzip" hidden />
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>运行日志</h2>
+        </div>
+        <pre id="logs" class="logs"></pre>
+      </section>
+    </div>
+    <script src="/login-helper.js?v=15"></script>
+  </body>
+</html>

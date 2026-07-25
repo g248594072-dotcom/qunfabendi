@@ -15,6 +15,25 @@ const envSchema = z.object({
     .optional()
     .default("https://developer.salesmartly.com"),
   UI_PORT: z.coerce.number().default(3789),
+  /** 控制台监听地址：127.0.0.1 仅本机；0.0.0.0 公网/局域网可访问 */
+  UI_HOST: z.string().optional().default("127.0.0.1"),
+  /** 控制台 Basic 认证（服务器部署强烈建议设置） */
+  UI_USER: z.string().optional().default("admin"),
+  UI_PASSWORD: z.string().optional().default(""),
+  /**
+   * 服务器模式：对外说明、默认提示无头发送等。
+   * 设为 1 / true 开启。
+   */
+  SERVER_MODE: z
+    .string()
+    .optional()
+    .default("")
+    .transform((v) => ["1", "true", "yes", "on"].includes(v.toLowerCase())),
+  /**
+   * 远程浏览器桌面（noVNC）地址，供登录助手展示。
+   * 例如 http://你的服务器IP:6080/vnc.html?autoconnect=1
+   */
+  NOVNC_URL: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -44,6 +63,11 @@ export function requireSaleSmartly(): {
 export const config = {
   rootDir,
   uiPort: env.UI_PORT,
+  uiHost: env.UI_HOST || "127.0.0.1",
+  uiUser: env.UI_USER || "admin",
+  uiPassword: env.UI_PASSWORD || "",
+  serverMode: Boolean(env.SERVER_MODE) || env.UI_HOST === "0.0.0.0",
+  novncUrl: (env.NOVNC_URL || "").trim(),
   salesmartly: {
     get projectId() {
       return requireSaleSmartly().projectId;

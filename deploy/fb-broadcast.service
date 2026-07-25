@@ -1,0 +1,16 @@
+[Unit]
+Description=Facebook Page Broadcast Console
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/fb-broadcast
+EnvironmentFile=/opt/fb-broadcast/.env
+# 无桌面服务器：仅无头发送；登录请用上传资料包，或改用 Docker(noVNC)
+ExecStart=/usr/bin/npm run ui
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

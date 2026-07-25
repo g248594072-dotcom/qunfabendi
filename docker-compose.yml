@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    container_name: fb-page-broadcast
+    restart: unless-stopped
+    # 只绑本机，由 nginx 对外（80）。若暂时不用 nginx，可改成 "3789:3789"
+    ports:
+      - "127.0.0.1:3789:3789"
+      - "127.0.0.1:6080:6080"
+    env_file:
+      - .env
+    environment:
+      UI_HOST: "0.0.0.0"
+      UI_PORT: "3789"
+      SERVER_MODE: "1"
+      DISPLAY: ":99"
+      NOVNC_PORT: "6080"
+      NOVNC_URL: "${NOVNC_URL:-http://107.175.246.246/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify}"
+    volumes:
+      - ./data:/app/data
+      - ./storage:/app/storage
+      - ./.env:/app/.env:ro
+    shm_size: "2gb"

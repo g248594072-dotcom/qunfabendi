@@ -1,16 +1,23 @@
 import http from "node:http";
 import { readFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   addAccount,
+  getActiveAccount,
   loadAccounts,
+  markAccountLoggedIn,
   removeAccount,
   renameAccount,
+  setAccountAssignee,
   setAccountProxy,
   setActiveAccount,
 } from "./accounts.js";
+import { checkBasicAuth } from "./auth.js";
 import type { ProxyConfig } from "./proxy.js";
+import { buildProxyFromStructured, type StructuredProxy } from "./proxy.js";
 import { config } from "./config.js";
+import { packAccountProfile, unpackAccountProfile } from "./profile-pack.js";
 import { saveSettings, type AppSettings } from "./settings.js";
 import {
   getDashboardState,
@@ -23,6 +30,24 @@ import {
   jobSyncContacts,
   jobSyncPages,
 } from "./jobs.js";
+
+async function readBodyBuffer(req: http.IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+function serverPublicInfo() {
+  return {
+    serverMode: config.serverMode,
+    authRequired: Boolean(config.uiPassword),
+    novncUrl: config.novncUrl,
+    loginHelperPath: "/login.html",
+    hasDisplay: Boolean(process.env.DISPLAY),
+  };
+}
 
 type JobName =
   | "login"
@@ -41,6 +66,8 @@ const state = {
   loginConfirm: null as null | (() => void),
   detectConfirm: null as null | (() => void),
   confirmHint: "",
+  /** 单账号登录时的目标 id（确认后可标记已登录） */
+  loginTargetAccountId: "" as string,
 };
 
 function pushLog(line: string): void {
@@ -126,27 +153,60 @@ function waitDetectConfirm(hint: string): Promise<void> {
   });
 }
 
-async function runJob(name: JobName): Promise<void> {
+function resolveProxyInput(
+  body: {
+    proxy?: ProxyConfig | null;
+    structuredProxy?: Partial<StructuredProxy> | null;
+  },
+): ProxyConfig | null | undefined {
+  if (body.structuredProxy) {
+    const built = buildProxyFromStructured(body.structuredProxy);
+    return built ?? null;
+  }
+  if ("proxy" in body) return body.proxy;
+  return undefined;
+}
+
+async function runJob(
+  name: JobName,
+  opts?: { accountId?: string },
+): Promise<void> {
   if (state.running) {
     throw new Error(`已有任务在运行：${state.running}`);
   }
   state.running = name;
   state.logs = [];
+  state.loginTargetAccountId = "";
   const log = (line: string) => pushLog(line);
 
   try {
     if (name === "login") {
-      await jobLogin(log, () =>
-        waitLoginConfirm(
-          "浏览器已打开。登录进「消息框」后，点页面上的「确认已登录」。",
-        ),
+      const accountId =
+        opts?.accountId || (await getActiveAccount()).id || undefined;
+      state.loginTargetAccountId = accountId || "";
+      await jobLogin(
+        log,
+        () =>
+          waitLoginConfirm(
+            "浏览器已打开。登录进「消息框」后，点页面上的「确认已登录」。",
+          ),
+        accountId,
       );
+      if (accountId) {
+        await markAccountLoggedIn(accountId, true);
+        pushLog(`已标记账号为「已登录」。`);
+      }
     } else if (name === "login-all") {
       await jobLoginAllAccounts(log, () =>
         waitLoginConfirm(
           "多个浏览器已打开。各窗口登录对应 Facebook 号后，点「确认已登录」。",
         ),
       );
+      const file = await loadAccounts();
+      for (const a of file.accounts) {
+        await markAccountLoggedIn(a.id, true);
+      }
+      pushLog("已标记全部账号为「已登录」。");
     } else if (name === "sync-pages") {
       await jobSyncPages(log);
     } else if (name === "detect-fb-pages") {
@@ -179,13 +239,32 @@ async function runJob(name: JobName): Promise<void> {
     state.loginConfirm = null;
     state.detectConfirm = null;
     state.confirmHint = "";
+    state.loginTargetAccountId = "";
   }
+}
+
+function lanAddresses(): string[] {
+  const out: string[] = [];
+  const ifaces = os.networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    for (const info of list || []) {
+      if (info.family === "IPv4" && !info.internal) out.push(info.address);
+    }
+  }
+  return out;
 }
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     const { pathname } = url;
+
+    if (req.method === "GET" && pathname === "/api/health") {
+      sendJson(res, 200, { ok: true, ...serverPublicInfo() });
+      return;
+    }
+
+    if (!checkBasicAuth(req, res)) return;
 
     if (req.method === "GET" && pathname === "/api/state") {
       const dash = await getDashboardState();
@@ -196,6 +275,8 @@ const server = http.createServer(async (req, res) => {
         waitingLoginConfirm: Boolean(state.loginConfirm),
         waitingDetectConfirm: Boolean(state.detectConfirm),
         confirmHint: state.confirmHint,
+        loginTargetAccountId: state.loginTargetAccountId,
+        ...serverPublicInfo(),
       });
       return;
     }
@@ -209,14 +290,29 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && pathname === "/api/accounts") {
       const body = JSON.parse(await readBody(req)) as {
-        action: "add" | "remove" | "rename" | "setActive" | "setProxy";
+        action:
+          | "add"
+          | "remove"
+          | "rename"
+          | "setActive"
+          | "setProxy"
+          | "setAssignee"
+          | "markLoggedIn"
+          | "markPending";
         id?: string;
         name?: string;
+        assignee?: string | null;
+        loggedIn?: boolean;
         proxy?: ProxyConfig | null;
+        structuredProxy?: Partial<StructuredProxy> | null;
       };
       let file;
       if (body.action === "add") {
-        file = await addAccount(body.name || "");
+        const proxy = resolveProxyInput(body);
+        file = await addAccount(body.name || "", {
+          proxy: proxy === undefined ? undefined : proxy,
+          assignee: body.assignee || undefined,
+        });
       } else if (body.action === "remove") {
         if (!body.id) throw new Error("缺少 id");
         file = await removeAccount(body.id);
@@ -228,7 +324,20 @@ const server = http.createServer(async (req, res) => {
         file = await setActiveAccount(body.id);
       } else if (body.action === "setProxy") {
         if (!body.id) throw new Error("缺少 id");
-        file = await setAccountProxy(body.id, body.proxy);
+        const proxy = resolveProxyInput(body);
+        file = await setAccountProxy(
+          body.id,
+          proxy === undefined ? null : proxy,
+        );
+      } else if (body.action === "setAssignee") {
+        if (!body.id) throw new Error("缺少 id");
+        file = await setAccountAssignee(body.id, body.assignee);
+      } else if (body.action === "markLoggedIn") {
+        if (!body.id) throw new Error("缺少 id");
+        file = await markAccountLoggedIn(body.id, body.loggedIn !== false);
+      } else if (body.action === "markPending") {
+        if (!body.id) throw new Error("缺少 id");
+        file = await markAccountLoggedIn(body.id, false);
       } else {
         throw new Error("未知 action");
       }
@@ -238,6 +347,51 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && pathname === "/api/accounts") {
       sendJson(res, 200, await loadAccounts());
+      return;
+    }
+
+    /** 登录助手专用精简状态（不含发送设置等） */
+    if (req.method === "GET" && pathname === "/api/login-helper/state") {
+      const accounts = await loadAccounts();
+      sendJson(res, 200, {
+        accounts,
+        running: state.running,
+        logs: state.logs.slice(-80),
+        waitingLoginConfirm: Boolean(state.loginConfirm),
+        confirmHint: state.confirmHint,
+        loginTargetAccountId: state.loginTargetAccountId,
+        ...serverPublicInfo(),
+      });
+      return;
+    }
+
+    /** 导出账号浏览器资料夹（.tar.gz），便于本机登录后上传到服务器 */
+    if (req.method === "GET" && pathname.startsWith("/api/accounts/") && pathname.endsWith("/profile")) {
+      const id = pathname.slice("/api/accounts/".length, -"/profile".length);
+      if (!id) throw new Error("缺少账号 id");
+      const packed = await packAccountProfile(id);
+      res.writeHead(200, {
+        "Content-Type": "application/gzip",
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(packed.fileName)}"`,
+        "Cache-Control": "no-store",
+      });
+      res.end(packed.buffer);
+      return;
+    }
+
+    /** 上传资料夹覆盖服务器上的登录态 */
+    if (req.method === "POST" && pathname.startsWith("/api/accounts/") && pathname.endsWith("/profile")) {
+      const id = pathname.slice("/api/accounts/".length, -"/profile".length);
+      if (!id) throw new Error("缺少账号 id");
+      const buf = await readBodyBuffer(req);
+      if (!buf.length) throw new Error("上传内容为空");
+      if (buf.length > 200 * 1024 * 1024) {
+        throw new Error("资料包过大（超过 200MB）");
+      }
+      const dir = await unpackAccountProfile(id, buf);
+      await markAccountLoggedIn(id, true);
+      pushLog(`已导入账号 ${id} 的登录资料 → ${dir}`);
+      sendJson(res, 200, { ok: true, profileDir: dir });
       return;
     }
 
@@ -276,6 +430,7 @@ const server = http.createServer(async (req, res) => {
       }
       state.running = false;
       state.confirmHint = "";
+      state.loginTargetAccountId = "";
       pushLog(
         prev
           ? `已强制解除任务占用（原任务：${prev}）。可重新点击操作按钮。`
@@ -308,8 +463,18 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
-      void runJob(name).catch(() => undefined);
-      sendJson(res, 200, { ok: true, started: name });
+      let accountId: string | undefined;
+      const raw = await readBody(req);
+      if (raw.trim()) {
+        try {
+          const body = JSON.parse(raw) as { accountId?: string };
+          accountId = body.accountId || undefined;
+        } catch {
+          /* 无 body 亦可 */
+        }
+      }
+      void runJob(name, { accountId }).catch(() => undefined);
+      sendJson(res, 200, { ok: true, started: name, accountId: accountId || null });
       return;
     }
 
@@ -326,7 +491,31 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(config.uiPort, () => {
+server.listen(config.uiPort, config.uiHost, () => {
+  const host = config.uiHost;
   console.log(`可视化控制台已启动: http://127.0.0.1:${config.uiPort}`);
-  console.log("浏览器打开上面的地址即可设置与调试。Ctrl+C 结束。");
+  console.log(`登录助手: http://127.0.0.1:${config.uiPort}/login.html`);
+  if (config.uiPassword) {
+    console.log(`已启用访问密码（用户 ${config.uiUser}）`);
+  } else if (host === "0.0.0.0") {
+    console.log("⚠ 已监听 0.0.0.0 但未设置 UI_PASSWORD，公网不安全，请尽快在 .env 设置。");
+  }
+  if (host === "0.0.0.0") {
+    const lans = lanAddresses();
+    for (const ip of lans) {
+      console.log(`对外访问: http://${ip}:${config.uiPort}/`);
+      console.log(`登录助手: http://${ip}:${config.uiPort}/login.html`);
+    }
+  } else if (host !== "127.0.0.1") {
+    console.log(`监听 ${host}:${config.uiPort}`);
+  }
+  if (config.novncUrl) {
+    console.log(`远程浏览器桌面(noVNC): ${config.novncUrl}`);
+  }
+  if (config.serverMode && !process.env.DISPLAY) {
+    console.log(
+      "提示：当前无 DISPLAY。发送请勾选无头模式；登录请用「上传资料包」或 Docker/noVNC 方案。",
+    );
+  }
+  console.log("Ctrl+C 结束。");
 });

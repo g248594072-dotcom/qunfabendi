@@ -77,16 +77,37 @@ docker compose logs -f
 
 注意：资料包含 Facebook 登录态，按密钥保管；尽量在**相同代理 IP** 下登录再上传，降低风控。
 
+### 一键更新（以后改代码后）
+
+本机改完并 push 到 GitHub 后，在**服务器项目目录**执行：
+
+```bash
+./update.sh
+```
+
+等价于：`git pull` → `docker compose up -d --build` → 重载 nginx。
+
+首次部署若还没有仓库：
+
+```bash
+git clone https://github.com/g248594072-dotcom/qunfabendi.git
+cd qunfabendi
+cp deploy/server.env.example .env
+nano .env
+bash deploy/apply-on-server.sh
+```
+
 ### 常用命令
 
 ```bash
+./update.sh                 # 一键更新
 docker compose ps
 docker compose logs -f app
 docker compose restart
 docker compose down
 ```
 
-数据持久化在宿主机目录：`./data`、`./storage`。
+数据持久化在宿主机目录：`./data`、`./storage`（更新代码不会清空）。
 
 ---
 

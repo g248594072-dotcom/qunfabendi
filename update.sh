@@ -16,7 +16,17 @@ fi
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "==> 拉取更新 (branch: ${BRANCH})"
 git fetch origin
-git pull --ff-only origin "${BRANCH}"
+# 服务器上若误改了脚本导致 pull 冲突：暂存本地改动后再快进合并（.env 不在 git 里，不受影响）
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "==> 检测到本地未提交改动，先 stash 再拉取"
+  git stash push -u -m "update.sh auto-stash $(date +%Y%m%d%H%M%S)" || true
+fi
+if ! git pull --ff-only origin "${BRANCH}"; then
+  echo "拉取失败。若仍冲突，可手动执行："
+  echo "  git checkout -- update.sh deploy/"
+  echo "  git pull --ff-only origin ${BRANCH}"
+  exit 1
+fi
 
 if [[ ! -f .env ]]; then
   echo "警告：缺少 .env。请先: cp deploy/server.env.example .env 并填写密钥。"

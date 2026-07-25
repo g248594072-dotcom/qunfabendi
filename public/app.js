@@ -49,7 +49,41 @@ const els = {
   btnSaveRemote: document.getElementById("btnSaveRemote"),
   remoteStatusLink: document.getElementById("remoteStatusLink"),
   remotePushPanel: document.getElementById("remotePushPanel"),
+  btnImportLoginPack: document.getElementById("btnImportLoginPack"),
+  loginPackFile: document.getElementById("loginPackFile"),
+  loginImportMsg: document.getElementById("loginImportMsg"),
 };
+
+els.btnImportLoginPack?.addEventListener("click", () => {
+  els.loginPackFile?.click();
+});
+
+els.loginPackFile?.addEventListener("change", async () => {
+  const file = els.loginPackFile.files?.[0];
+  if (!file) return;
+  if (els.loginImportMsg) els.loginImportMsg.textContent = "正在导入登录资料…";
+  try {
+    const res = await fetch("/api/sync/import-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/gzip" },
+      body: file,
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (els.loginImportMsg) {
+      els.loginImportMsg.textContent = `已导入 ${data.mergedAccounts || 0} 个账号：${(data.restored || []).join("、")}`;
+    }
+    alert("登录资料已批量导入。");
+    lastAccountsKey = "";
+    await refresh();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (els.loginImportMsg) els.loginImportMsg.textContent = "导入失败：" + msg;
+    alert(msg);
+  } finally {
+    els.loginPackFile.value = "";
+  }
+});
 
 async function saveRemoteConnection() {
   const url = (els.remoteServerUrl?.value || "").trim();

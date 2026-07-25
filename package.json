@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "ui": "tsx src/server.ts",
+    "helper": "tsx src/server.ts",
     "login": "tsx src/cli.ts login",
     "sync:pages": "tsx src/cli.ts sync-pages",
     "detect:fb": "tsx src/cli.ts detect-fb-pages",

@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promise
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { loadAccounts, saveAccounts, resolveProfileDir } from "./accounts.js";
 import { config } from "./config.js";
 import { ensureDir } from "./utils/delay.js";
 
@@ -127,6 +128,165 @@ export async function packSyncBundle(): Promise<{
       fileName: `fb-sync-${stamp}.tar.gz`,
       buffer,
     };
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * 登录助手专用包：仅账号列表 + 登录资料夹（给别人填完回传给你）
+ */
+export async function packLoginBundle(): Promise<{
+  fileName: string;
+  buffer: Buffer;
+}> {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "fb-login-"));
+  const stage = path.join(tmp, "bundle");
+  const outFile = path.join(tmp, "login-bundle.tar.gz");
+  await mkdir(path.join(stage, "data"), { recursive: true });
+  await mkdir(path.join(stage, "storage"), { recursive: true });
+
+  try {
+    const { copyFile } = await import("node:fs/promises");
+    const accountsSrc = path.join(config.paths.dataDir, "accounts.json");
+    if (await pathExists(accountsSrc)) {
+      await copyFile(accountsSrc, path.join(stage, "data", "accounts.json"));
+    }
+
+    const profilesSrc = path.join(config.rootDir, "storage", "profiles");
+    if (await pathExists(profilesSrc)) {
+      await copyProfileSlim(
+        profilesSrc,
+        path.join(stage, "storage", "profiles"),
+      );
+    }
+    const browserSrc = path.join(config.rootDir, "storage", "browser-profile");
+    if (await pathExists(browserSrc)) {
+      await copyProfileSlim(
+        browserSrc,
+        path.join(stage, "storage", "browser-profile"),
+      );
+    }
+
+    await writeFile(
+      path.join(stage, "manifest.json"),
+      JSON.stringify(
+        {
+          kind: "fb-page-broadcast-login",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await execFileAsync("tar", ["-czf", outFile, "-C", stage, "."], {
+      windowsHide: true,
+    });
+    const buffer = await readFile(outFile);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    return {
+      fileName: `fb-login-${stamp}.tar.gz`,
+      buffer,
+    };
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * 批量导入登录助手回传的资料：合并账号 + 覆盖对应登录资料夹
+ */
+export async function unpackLoginBundle(archive: Buffer): Promise<{
+  restored: string[];
+  mergedAccounts: number;
+}> {
+  if (!archive.length) throw new Error("上传内容为空");
+  if (archive.length > 800 * 1024 * 1024) {
+    throw new Error("资料包过大（超过 800MB）");
+  }
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "fb-login-in-"));
+  const archivePath = path.join(tmp, "upload.tar.gz");
+  const extractDir = path.join(tmp, "extract");
+  await mkdir(extractDir, { recursive: true });
+
+  try {
+    await writeFile(archivePath, archive);
+    await execFileAsync("tar", ["-xzf", archivePath, "-C", extractDir], {
+      windowsHide: true,
+    });
+
+    let root = extractDir;
+    if (!(await pathExists(path.join(extractDir, "data")))) {
+      const { readdir } = await import("node:fs/promises");
+      for (const e of await readdir(extractDir)) {
+        if (await pathExists(path.join(extractDir, e, "data"))) {
+          root = path.join(extractDir, e);
+          break;
+        }
+      }
+    }
+
+    const incomingAccountsPath = path.join(root, "data", "accounts.json");
+    if (!(await pathExists(incomingAccountsPath))) {
+      throw new Error("不是登录资料包：缺少 accounts.json（请用登录助手的「导出给主控」）");
+    }
+
+    const incoming = JSON.parse(
+      await readFile(incomingAccountsPath, "utf8"),
+    ) as Awaited<ReturnType<typeof loadAccounts>>;
+    const current = await loadAccounts();
+    const byId = new Map(current.accounts.map((a) => [a.id, a]));
+    let merged = 0;
+
+    for (const acc of incoming.accounts || []) {
+      byId.set(acc.id, {
+        ...byId.get(acc.id),
+        ...acc,
+      });
+      merged += 1;
+    }
+    current.accounts = [...byId.values()];
+    if (
+      incoming.activeAccountId &&
+      current.accounts.some((a) => a.id === incoming.activeAccountId)
+    ) {
+      current.activeAccountId = incoming.activeAccountId;
+    }
+    await saveAccounts(current);
+
+    const { cp } = await import("node:fs/promises");
+    const restored: string[] = [`accounts.json（合并 ${merged} 个账号）`];
+
+    for (const acc of incoming.accounts || []) {
+      const srcProfile = path.join(root, acc.profileDir);
+      // 包内路径相对 bundle 根：storage/profiles/xxx
+      const altSrc = path.join(root, "storage", "profiles", acc.id);
+      const fromPack = (await pathExists(srcProfile))
+        ? srcProfile
+        : (await pathExists(altSrc))
+          ? altSrc
+          : "";
+      if (!fromPack) continue;
+      const dest = resolveProfileDir(acc);
+      await rm(dest, { recursive: true, force: true }).catch(() => undefined);
+      await ensureDir(path.dirname(dest));
+      await cp(fromPack, dest, { recursive: true, force: true });
+      restored.push(acc.profileDir || acc.id);
+    }
+
+    const browserSrc = path.join(root, "storage", "browser-profile");
+    if (await pathExists(browserSrc)) {
+      const dest = path.join(config.rootDir, "storage", "browser-profile");
+      await rm(dest, { recursive: true, force: true }).catch(() => undefined);
+      await cp(browserSrc, dest, { recursive: true, force: true });
+      restored.push("storage/browser-profile");
+    }
+
+    return { restored, mergedAccounts: merged };
   } finally {
     await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
   }

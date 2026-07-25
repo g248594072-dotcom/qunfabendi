@@ -23,7 +23,12 @@ import {
   proxyNovncUpgrade,
 } from "./novnc-proxy.js";
 import { packAccountProfile, unpackAccountProfile } from "./profile-pack.js";
-import { packSyncBundle, unpackSyncBundle } from "./sync-pack.js";
+import {
+  packLoginBundle,
+  packSyncBundle,
+  unpackLoginBundle,
+  unpackSyncBundle,
+} from "./sync-pack.js";
 import { loadSettings, saveSettings, type AppSettings } from "./settings.js";
 import {
   getDashboardState,
@@ -125,12 +130,14 @@ async function serveStatic(
   res: http.ServerResponse,
   urlPath: string,
 ): Promise<void> {
-  // 服务器代理模式：默认只展示精简状态页，不提供完整操作台
+  // 服务器代理模式：默认只展示精简状态页；登录助手模式默认进 login.html
   let safe = urlPath === "/" ? "/index.html" : urlPath;
   if (config.serverMode) {
     if (safe === "/index.html" || safe === "/login.html") {
       safe = "/agent.html";
     }
+  } else if (process.env.HELPER_ONLY === "1" && safe === "/index.html") {
+    safe = "/login.html";
   }
   const filePath = path.join(config.paths.publicDir, safe);
   if (!filePath.startsWith(config.paths.publicDir)) {
@@ -452,11 +459,37 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    /** 登录助手导出：仅账号+登录态（给别人回传给你） */
+    if (req.method === "GET" && pathname === "/api/sync/export-login") {
+      const packed = await packLoginBundle();
+      pushLog(
+        `已导出登录资料包 ${packed.fileName}（${Math.round(packed.buffer.length / 1024)} KB）`,
+      );
+      res.writeHead(200, {
+        "Content-Type": "application/gzip",
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(packed.fileName)}"`,
+        "Cache-Control": "no-store",
+      });
+      res.end(packed.buffer);
+      return;
+    }
+
     /** 一键导入同步包 */
     if (req.method === "POST" && pathname === "/api/sync/import") {
       const buf = await readBodyBuffer(req);
       const result = await unpackSyncBundle(buf);
       pushLog(`已导入同步包：${result.restored.join("、")}`);
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    /** 批量导入登录助手回传的资料 */
+    if (req.method === "POST" && pathname === "/api/sync/import-login") {
+      const buf = await readBodyBuffer(req);
+      const result = await unpackLoginBundle(buf);
+      pushLog(
+        `已批量导入登录资料：${result.mergedAccounts} 个账号；${result.restored.join("、")}`,
+      );
       sendJson(res, 200, { ok: true, ...result });
       return;
     }

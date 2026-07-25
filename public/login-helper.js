@@ -364,8 +364,8 @@ els.btnCopyLogs?.addEventListener("click", () => {
 });
 
 els.btnExportAll?.addEventListener("click", () => {
-  // 走下载链接，包含账号+登录态+主页客户等，供服务器导入后发送
-  window.location.href = "/api/sync/export";
+  // 仅账号+登录态，发给主控批量导入
+  window.location.href = "/api/sync/export-login";
 });
 
 refresh();

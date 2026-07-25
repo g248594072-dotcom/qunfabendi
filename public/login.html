@@ -12,15 +12,16 @@
         <div>
           <h1>Facebook 登录助手</h1>
           <p class="sub">
-            建议在本机使用：添加账号 →（可选）设代理 → 打开登录（本机会弹出浏览器）→ 确认已登录 → 一键导出。
+            给协助登录的人用：添加账号 →（可选）设代理 → 打开登录 → 确认已登录 → 导出资料包发给主控。
           </p>
         </div>
         <div class="status" id="runStatus">空闲</div>
       </header>
 
       <section class="hint">
-        <strong>推荐流程：</strong>
-        本机完成登录与准备 → 点「一键导出全部」下载资料包 → 到服务器控制台「一键导入」→ 服务器只做「真正发送」。
+        <strong>你的任务：</strong>
+        添加账号并完成 Facebook 登录后，点「导出给主控」下载文件，把文件发回给负责人。
+        不要做群发、同步客户等操作。
       </section>
 
       <section class="panel">
@@ -50,7 +51,7 @@
         <h2>2. 账号列表</h2>
         <div class="helper-actions sticky-confirm" style="margin-bottom: 12px">
           <button type="button" id="btnExportAll" class="accent">
-            一键导出全部（上传服务器用）
+            导出给主控（账号+登录态）
           </button>
           <button type="button" id="btnLoginConfirm" class="primary" hidden>
             确认已登录（保存到本机）
@@ -110,6 +111,6 @@
       </div>
     </div>
 
-    <script src="/login-helper.js?v=19"></script>
+    <script src="/login-helper.js?v=23"></script>
   </body>
 </html>

@@ -86,6 +86,20 @@
             <button type="button" id="btnOpenLoginHelper" class="accent">打开登录助手</button>
           </div>
         </div>
+        <div class="actions" style="margin-top: 10px">
+          <button type="button" id="btnImportLoginPack" class="primary">
+            批量导入登录资料（他人回传）
+          </button>
+          <input
+            id="loginPackFile"
+            type="file"
+            accept=".gz,.tar.gz,application/gzip"
+            hidden
+          />
+        </div>
+        <p class="note" id="loginImportMsg">
+          把登录助手「导出给主控」的文件选进来，会合并账号并写入登录态。
+        </p>
       </section>
 
       <div class="grid">
@@ -272,6 +286,6 @@
       </div>
     </div>
 
-    <script src="/app.js?v=22"></script>
+    <script src="/app.js?v=23"></script>
   </body>
 </html>

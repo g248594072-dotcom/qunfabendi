@@ -2,14 +2,20 @@ FROM mcr.microsoft.com/playwright:v1.51.0-jammy
 
 WORKDIR /app
 
-# 远程登录用：虚拟显示器 + noVNC
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai
+
+# 远程登录用：虚拟显示器 + noVNC（禁止交互式时区弹窗）
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    tzdata \
     xvfb \
     x11vnc \
     novnc \
     websockify \
     fonts-noto-cjk \
+  && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+  && echo "$TZ" > /etc/timezone \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./

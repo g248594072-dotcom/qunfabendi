@@ -18,6 +18,26 @@ const DATA_FILES = [
   "settings.json",
 ] as const;
 
+/** Chromium 缓存目录（体积大、登录不需要） */
+const PROFILE_EXCLUDE_DIRS = new Set([
+  "Cache",
+  "Code Cache",
+  "GPUCache",
+  "GrShaderCache",
+  "GraphiteDawnCache",
+  "ShaderCache",
+  "Media Cache",
+  "Service Worker",
+  "Crashpad",
+  "BrowserMetrics",
+  "optimization_guide_prediction_model_downloads",
+  "Component Crx Cache",
+  "DawnGraphiteCache",
+  "DawnWebGPUCache",
+  "VideoDecodeStats",
+  "blob_storage",
+]);
+
 async function pathExists(p: string): Promise<boolean> {
   try {
     await access(p);
@@ -25,6 +45,21 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function copyProfileSlim(src: string, dest: string): Promise<void> {
+  const { cp } = await import("node:fs/promises");
+  await cp(src, dest, {
+    recursive: true,
+    force: true,
+    filter: (input) => {
+      const name = path.basename(input);
+      if (PROFILE_EXCLUDE_DIRS.has(name)) return false;
+      // 跳过超大日志/临时
+      if (name.endsWith(".log") || name === "LOCK") return true;
+      return true;
+    },
+  });
 }
 
 /**
@@ -42,7 +77,7 @@ export async function packSyncBundle(): Promise<{
   await mkdir(path.join(stage, "storage"), { recursive: true });
 
   try {
-    const { copyFile, cp } = await import("node:fs/promises");
+    const { copyFile } = await import("node:fs/promises");
 
     for (const name of DATA_FILES) {
       const src = path.join(config.paths.dataDir, name);
@@ -53,18 +88,18 @@ export async function packSyncBundle(): Promise<{
 
     const profilesSrc = path.join(config.rootDir, "storage", "profiles");
     if (await pathExists(profilesSrc)) {
-      await cp(profilesSrc, path.join(stage, "storage", "profiles"), {
-        recursive: true,
-        force: true,
-      });
+      await copyProfileSlim(
+        profilesSrc,
+        path.join(stage, "storage", "profiles"),
+      );
     }
 
     const browserSrc = path.join(config.rootDir, "storage", "browser-profile");
     if (await pathExists(browserSrc)) {
-      await cp(browserSrc, path.join(stage, "storage", "browser-profile"), {
-        recursive: true,
-        force: true,
-      });
+      await copyProfileSlim(
+        browserSrc,
+        path.join(stage, "storage", "browser-profile"),
+      );
     }
 
     await writeFile(
@@ -75,6 +110,7 @@ export async function packSyncBundle(): Promise<{
           version: 1,
           exportedAt: new Date().toISOString(),
           files: DATA_FILES,
+          slimProfile: true,
         },
         null,
         2,
@@ -119,7 +155,6 @@ export async function unpackSyncBundle(archive: Buffer): Promise<{
       windowsHide: true,
     });
 
-    // 兼容包根目录直接是 data/，或套了一层目录
     let root = extractDir;
     const directData = path.join(extractDir, "data");
     if (!(await pathExists(directData))) {

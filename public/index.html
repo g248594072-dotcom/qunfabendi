@@ -29,6 +29,7 @@
         <h2>推送到服务器发送</h2>
         <p class="note">
           会打包当前账号、登录态、主页、客户、黑名单、设置，上传到服务器并自动开始发送。
+          「打开服务器状态页」只用来看进度/日志，不能在上面点操作。
         </p>
         <div class="row">
           <label>
@@ -45,10 +46,13 @@
           </label>
           <label>
             服务器密码
-            <input id="remoteServerPassword" type="password" placeholder="UI_PASSWORD" />
+            <input id="remoteServerPassword" type="password" placeholder="填 .env 里的 UI_PASSWORD" />
           </label>
         </div>
         <div class="actions">
+          <button type="button" id="btnSaveRemote" class="primary">
+            保存服务器连接
+          </button>
           <button type="button" id="btnPushRemote" class="danger">
             推送到服务器并发送
           </button>
@@ -268,6 +272,6 @@
       </div>
     </div>
 
-    <script src="/app.js?v=21"></script>
+    <script src="/app.js?v=22"></script>
   </body>
 </html>

@@ -511,11 +511,18 @@ const server = http.createServer(async (req, res) => {
         body: new Uint8Array(packed.buffer),
       });
       const text = await resp.text();
+      if (resp.status === 413) {
+        throw new Error(
+          "上传被拒绝（HTTP 413 文件太大）。请在 1Panel 网站设置里把「客户端最大上传」调到 500MB 或更大，然后重试。",
+        );
+      }
       let data: { ok?: boolean; error?: string; started?: string } = {};
       try {
         data = JSON.parse(text) as typeof data;
       } catch {
-        throw new Error(`远程服务器响应异常 HTTP ${resp.status}: ${text.slice(0, 200)}`);
+        throw new Error(
+          `远程服务器响应异常 HTTP ${resp.status}: ${text.slice(0, 200)}`,
+        );
       }
       if (!resp.ok || data.error) {
         throw new Error(data.error || `远程推送失败 HTTP ${resp.status}`);

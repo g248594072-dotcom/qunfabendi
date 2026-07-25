@@ -46,18 +46,46 @@ const els = {
   remoteServerUser: document.getElementById("remoteServerUser"),
   remoteServerPassword: document.getElementById("remoteServerPassword"),
   btnPushRemote: document.getElementById("btnPushRemote"),
+  btnSaveRemote: document.getElementById("btnSaveRemote"),
   remoteStatusLink: document.getElementById("remoteStatusLink"),
   remotePushPanel: document.getElementById("remotePushPanel"),
 };
 
+async function saveRemoteConnection() {
+  const url = (els.remoteServerUrl?.value || "").trim();
+  if (!url) throw new Error("请填写服务器地址");
+  const res = await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(collectSettings(selectedIds())),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  if (els.remoteStatusLink) {
+    els.remoteStatusLink.hidden = false;
+    els.remoteStatusLink.href = url.replace(/\/$/, "") + "/";
+  }
+  if (els.syncMsg) els.syncMsg.textContent = "服务器连接已保存";
+  return data;
+}
+
+els.btnSaveRemote?.addEventListener("click", async () => {
+  try {
+    await saveRemoteConnection();
+    alert("服务器连接已保存");
+  } catch (err) {
+    alert(err instanceof Error ? err.message : String(err));
+  }
+});
+
 els.btnPushRemote?.addEventListener("click", async () => {
   try {
-    // 先保存远程服务器配置 + 当前发送设置
-    await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(collectSettings(selectedIds())),
-    });
+    const url = (els.remoteServerUrl?.value || "").trim();
+    if (!url) throw new Error("请先填写服务器地址");
+    if (!(els.remoteServerPassword?.value || "").trim()) {
+      throw new Error("请填写服务器密码（.env 里的 UI_PASSWORD）");
+    }
+    await saveRemoteConnection();
     if (els.syncMsg) els.syncMsg.textContent = "正在打包并推送到服务器…";
     els.btnPushRemote.disabled = true;
     const res = await fetch("/api/remote/push-send", { method: "POST" });

@@ -60,7 +60,7 @@ function parseProxyStructured(proxy) {
 function proxyTableHtml(proxy) {
   const s = parseProxyStructured(proxy);
   if (!s) {
-    return `<p class="warn" style="margin:0">尚未设置代理 IP，请先点「设置代理 IP」。</p>`;
+    return `<p class="note" style="margin:0">未设置代理：登录将走服务器本机出口 IP（直连）。需要独立 IP 时再点「设置代理 IP」。</p>`;
   }
   return `<table class="proxy-table">
     <tr><th>协议</th><td><code>${escapeHtml(s.protocol)}</code></td></tr>
@@ -148,13 +148,11 @@ function renderAccounts(accountsFile, state) {
       const status = a.loginStatus === "logged_in" ? "logged_in" : "pending";
       const statusLabel = status === "logged_in" ? "已登录（已保存）" : "待登录";
       const isTarget = targetId === a.id && running === "login";
-      const hasProxy = Boolean(parseProxyStructured(a.proxy));
       const last = a.lastLoginAt
         ? `<span class="note">保存时间：${escapeHtml(
             new Date(a.lastLoginAt).toLocaleString(),
           )}</span>`
         : "";
-      const loginDisabled = running || !hasProxy ? "disabled" : "";
       return `<div class="helper-card ${isTarget ? "busy" : ""}" data-id="${escapeHtml(a.id)}">
         <div class="helper-card-top">
           <div>
@@ -169,18 +167,16 @@ function renderAccounts(accountsFile, state) {
           <button type="button" data-proxy="${escapeHtml(a.id)}" ${running ? "disabled" : ""}>
             设置代理 IP
           </button>
-          <button type="button" class="primary" data-login="${escapeHtml(a.id)}" ${loginDisabled}>
+          <button type="button" class="primary" data-login="${escapeHtml(a.id)}" ${
+            running ? "disabled" : ""
+          }>
             打开登录
           </button>
           <button type="button" data-rename="${escapeHtml(a.id)}" ${running ? "disabled" : ""}>
             改名
           </button>
         </div>
-        ${
-          !hasProxy
-            ? `<p class="note">请先设置代理 IP，再打开登录（每个号用独立出口）。</p>`
-            : `<p class="note">登录完成后点上方绿色「确认已登录」，信息会保存在服务器。</p>`
-        }
+        <p class="note">登录完成后点上方绿色「确认已登录」，信息会保存在服务器。</p>
       </div>`;
     })
     .join("");
@@ -224,11 +220,6 @@ async function refresh() {
 }
 
 async function startLogin(accountId) {
-  const acc = lastAccounts.find((a) => a.id === accountId);
-  if (!parseProxyStructured(acc?.proxy)) {
-    alert("请先设置代理 IP");
-    return;
-  }
   if (els.novncLink?.href && els.novncLink.href !== "#") {
     window.open(els.novncLink.href, "_blank", "noopener");
   }

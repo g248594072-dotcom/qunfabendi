@@ -41,41 +41,42 @@ const els = {
   btnProxyClear: document.getElementById("btnProxyClear"),
   btnOpenLoginHelper: document.getElementById("btnOpenLoginHelper"),
   serverModeHint: document.getElementById("serverModeHint"),
-  btnImportSync: document.getElementById("btnImportSync"),
-  syncFile: document.getElementById("syncFile"),
   syncMsg: document.getElementById("syncMsg"),
+  remoteServerUrl: document.getElementById("remoteServerUrl"),
+  remoteServerUser: document.getElementById("remoteServerUser"),
+  remoteServerPassword: document.getElementById("remoteServerPassword"),
+  btnPushRemote: document.getElementById("btnPushRemote"),
+  remoteStatusLink: document.getElementById("remoteStatusLink"),
+  remotePushPanel: document.getElementById("remotePushPanel"),
 };
 
-els.btnImportSync?.addEventListener("click", () => {
-  els.syncFile?.click();
-});
-
-els.syncFile?.addEventListener("change", async () => {
-  const file = els.syncFile.files?.[0];
-  if (!file) return;
-  if (els.syncMsg) els.syncMsg.textContent = "正在导入…";
+els.btnPushRemote?.addEventListener("click", async () => {
   try {
-    const res = await fetch("/api/sync/import", {
+    // 先保存远程服务器配置 + 当前发送设置
+    await fetch("/api/settings", {
       method: "POST",
-      headers: { "Content-Type": "application/gzip" },
-      body: file,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectSettings(selectedIds())),
     });
+    if (els.syncMsg) els.syncMsg.textContent = "正在打包并推送到服务器…";
+    els.btnPushRemote.disabled = true;
+    const res = await fetch("/api/remote/push-send", { method: "POST" });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     if (els.syncMsg) {
-      els.syncMsg.textContent = `导入成功：${(data.restored || []).join("、")}`;
+      els.syncMsg.textContent = `已推送（${Math.round((data.bytes || 0) / 1024)} KB），服务器已开始发送。`;
     }
-    alert("资料包已导入。请勾选无头模式并保存，然后可进行发送。");
-    lastPagesKey = "";
-    lastAccountsKey = "";
-    settingsHydrated = false;
-    await refresh();
+    if (els.remoteStatusLink && data.statusUrl) {
+      els.remoteStatusLink.hidden = false;
+      els.remoteStatusLink.href = data.statusUrl;
+    }
+    alert("已推送到服务器并开始发送。\n可打开服务器状态页查看进度。");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (els.syncMsg) els.syncMsg.textContent = "导入失败：" + msg;
+    if (els.syncMsg) els.syncMsg.textContent = "推送失败：" + msg;
     alert(msg);
   } finally {
-    els.syncFile.value = "";
+    if (els.btnPushRemote) els.btnPushRemote.disabled = false;
   }
 });
 
@@ -132,6 +133,17 @@ function fillSettings(s) {
   if (els.maxSendPerPage) els.maxSendPerPage.value = s.maxSendPerPage ?? 2;
   if (els.contactDays) els.contactDays.value = s.contactDays ?? 365;
   if (els.headless) els.headless.checked = Boolean(s.headless);
+  if (els.remoteServerUrl) els.remoteServerUrl.value = s.remoteServerUrl ?? "";
+  if (els.remoteServerUser) {
+    els.remoteServerUser.value = s.remoteServerUser ?? "admin";
+  }
+  if (els.remoteServerPassword) {
+    els.remoteServerPassword.value = s.remoteServerPassword ?? "";
+  }
+  if (els.remoteStatusLink && s.remoteServerUrl) {
+    els.remoteStatusLink.hidden = false;
+    els.remoteStatusLink.href = String(s.remoteServerUrl).replace(/\/$/, "") + "/";
+  }
 }
 
 function collectSettings(selectedPageIds) {
@@ -144,6 +156,9 @@ function collectSettings(selectedPageIds) {
     contactDays: Number(els.contactDays?.value ?? 365),
     headless: Boolean(els.headless?.checked),
     selectedPageIds,
+    remoteServerUrl: (els.remoteServerUrl?.value ?? "").trim(),
+    remoteServerUser: (els.remoteServerUser?.value ?? "").trim() || "admin",
+    remoteServerPassword: els.remoteServerPassword?.value ?? "",
   };
 }
 
@@ -394,8 +409,8 @@ async function refresh() {
 
     running = Boolean(data.running);
 
-    if (els.serverModeHint) {
-      els.serverModeHint.hidden = !data.serverMode;
+    if (els.remotePushPanel) {
+      els.remotePushPanel.hidden = Boolean(data.serverMode);
     }
     const opsLocal = document.getElementById("opsLocalJobs");
     const opsLocalHint = document.getElementById("opsLocalHint");

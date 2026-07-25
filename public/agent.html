@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>发送代理（服务器）</title>
+    <link rel="stylesheet" href="/styles.css?v=21" />
+  </head>
+  <body>
+    <div class="app helper-app">
+      <header class="top">
+        <div>
+          <h1>发送代理</h1>
+          <p class="sub">
+            本机推送资料后，服务器在此自动执行发送。无需在服务器操作①～⑤。
+          </p>
+        </div>
+        <div class="status" id="runStatus">空闲</div>
+      </header>
+
+      <section class="hint">
+        请在<strong>本机控制台</strong>完成登录与同步，然后点「推送到服务器并发送」。
+        此页仅显示运行状态与日志。
+      </section>
+
+      <section class="panel">
+        <h2>状态</h2>
+        <p class="note" id="statusText">等待本机推送…</p>
+        <div class="helper-actions">
+          <button type="button" id="btnResetJob" class="danger">解除卡住</button>
+          <button type="button" id="btnCopyLogs" class="btn-mini">一键复制日志</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>运行日志</h2>
+        </div>
+        <pre id="logs" class="logs"></pre>
+      </section>
+    </div>
+    <script src="/agent.js?v=21"></script>
+  </body>
+</html>

@@ -17,24 +17,45 @@
       </header>
 
       <section class="hint">
-        <strong>推荐分工：</strong>
-        <b>本机</b>做登录 / 同步主页 / 探测 / 黑名单 / 同步客户 →
-        「一键导出」→
-        <b>服务器</b>「一键导入」→ 勾选无头 → 只做「⑥ 真正发送」。<br />
+        <strong>推荐流程：</strong>
+        本机完成登录 / 同步 / 探测 / 黑名单 / 客户 →
+        填写下方远程服务器 →
+        点「推送到服务器并发送」。服务器只负责接收并无头发送，无需操作台。<br />
         登录助手：<a href="/login.html" target="_blank" rel="noopener">/login.html</a>
         · 黑名单标签：<code id="tagList"></code>
-        <span id="serverModeHint" hidden><br /><strong>服务器模式：</strong>请勾选「无头模式」；用下方「一键导入」接收本机资料包后发送。</span>
       </section>
 
-      <section class="panel">
-        <h2>本机 ↔ 服务器 资料同步</h2>
+      <section class="panel" id="remotePushPanel">
+        <h2>推送到服务器发送</h2>
         <p class="note">
-          导出包含：账号、代理、登录态、主页、客户、黑名单、设置。导入后即可在服务器发送。
+          会打包当前账号、登录态、主页、客户、黑名单、设置，上传到服务器并自动开始发送。
         </p>
+        <div class="row">
+          <label>
+            服务器地址
+            <input
+              id="remoteServerUrl"
+              type="text"
+              placeholder="https://qunfa.guanligongju.vip"
+            />
+          </label>
+          <label>
+            服务器账号
+            <input id="remoteServerUser" type="text" placeholder="admin" />
+          </label>
+          <label>
+            服务器密码
+            <input id="remoteServerPassword" type="password" placeholder="UI_PASSWORD" />
+          </label>
+        </div>
         <div class="actions">
-          <a class="button-link accent" href="/api/sync/export">一键导出全部资料包</a>
-          <button type="button" id="btnImportSync" class="primary">一键导入资料包</button>
-          <input id="syncFile" type="file" accept=".gz,.tar.gz,application/gzip" hidden />
+          <button type="button" id="btnPushRemote" class="danger">
+            推送到服务器并发送
+          </button>
+          <a id="remoteStatusLink" class="button-link accent" href="#" target="_blank" rel="noopener" hidden>
+            打开服务器状态页
+          </a>
+          <a class="button-link" href="/api/sync/export">仅导出资料包（备用）</a>
         </div>
         <p class="note" id="syncMsg"></p>
       </section>
@@ -247,6 +268,6 @@
       </div>
     </div>
 
-    <script src="/app.js?v=20"></script>
+    <script src="/app.js?v=21"></script>
   </body>
 </html>

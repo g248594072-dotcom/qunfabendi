@@ -21,6 +21,10 @@ export type AppSettings = {
    * 有则优先于账号默认代理；空/缺省则用账号代理或直连。
    */
   pageProxies: Record<string, ProxyConfig>;
+  /** 本机推送到远程发送服务器（仅本机控制台使用） */
+  remoteServerUrl: string;
+  remoteServerUser: string;
+  remoteServerPassword: string;
 };
 
 const defaults: AppSettings = {
@@ -34,6 +38,9 @@ const defaults: AppSettings = {
   selectedPageIds: [],
   maxPageConcurrency: 6,
   pageProxies: {},
+  remoteServerUrl: "",
+  remoteServerUser: "admin",
+  remoteServerPassword: "",
 };
 
 function sanitizePageProxies(
@@ -91,6 +98,18 @@ export async function saveSettings(
       patch.pageProxies !== undefined
         ? sanitizePageProxies(patch.pageProxies)
         : current.pageProxies,
+    remoteServerUrl:
+      patch.remoteServerUrl !== undefined
+        ? String(patch.remoteServerUrl || "").trim().replace(/\/$/, "")
+        : current.remoteServerUrl,
+    remoteServerUser:
+      patch.remoteServerUser !== undefined
+        ? String(patch.remoteServerUser || "").trim() || "admin"
+        : current.remoteServerUser,
+    remoteServerPassword:
+      patch.remoteServerPassword !== undefined
+        ? String(patch.remoteServerPassword || "")
+        : current.remoteServerPassword,
   };
 
   if (next.delayMaxSec < next.delayMinSec) {

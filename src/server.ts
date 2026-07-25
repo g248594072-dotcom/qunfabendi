@@ -24,7 +24,7 @@ import {
 } from "./novnc-proxy.js";
 import { packAccountProfile, unpackAccountProfile } from "./profile-pack.js";
 import { packSyncBundle, unpackSyncBundle } from "./sync-pack.js";
-import { saveSettings, type AppSettings } from "./settings.js";
+import { loadSettings, saveSettings, type AppSettings } from "./settings.js";
 import {
   getDashboardState,
   jobDetectAllAccounts,
@@ -78,6 +78,7 @@ const state = {
   confirmHint: "",
   /** 单账号登录时的目标 id（确认后可标记已登录） */
   loginTargetAccountId: "" as string,
+  lastMessage: "",
 };
 
 function pushLog(line: string): void {
@@ -124,7 +125,13 @@ async function serveStatic(
   res: http.ServerResponse,
   urlPath: string,
 ): Promise<void> {
-  const safe = urlPath === "/" ? "/index.html" : urlPath;
+  // 服务器代理模式：默认只展示精简状态页，不提供完整操作台
+  let safe = urlPath === "/" ? "/index.html" : urlPath;
+  if (config.serverMode) {
+    if (safe === "/index.html" || safe === "/login.html") {
+      safe = "/agent.html";
+    }
+  }
   const filePath = path.join(config.paths.publicDir, safe);
   if (!filePath.startsWith(config.paths.publicDir)) {
     res.writeHead(403).end("Forbidden");
@@ -184,9 +191,13 @@ async function runJob(
   if (state.running) {
     throw new Error(`已有任务在运行：${state.running}`);
   }
+  if (config.serverMode && name !== "send") {
+    throw new Error("服务器代理模式仅允许执行发送。请在本机完成准备后推送。");
+  }
   state.running = name;
   state.logs = [];
   state.loginTargetAccountId = "";
+  state.lastMessage = `开始任务：${name}`;
   const log = (line: string) => pushLog(line);
 
   try {
@@ -241,8 +252,11 @@ async function runJob(
       await jobSend({ dryRun: false }, log);
     }
     pushLog("✓ 完成");
+    state.lastMessage = `任务完成：${name}`;
   } catch (err) {
-    pushLog(`✗ ${err instanceof Error ? err.message : String(err)}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    pushLog(`✗ ${msg}`);
+    state.lastMessage = `任务失败：${msg}`;
     throw err;
   } finally {
     state.running = false;
@@ -251,6 +265,20 @@ async function runJob(
     state.confirmHint = "";
     state.loginTargetAccountId = "";
   }
+}
+
+async function agentPushAndSend(buf: Buffer): Promise<void> {
+  if (state.running) {
+    throw new Error(`已有任务在运行：${state.running}`);
+  }
+  pushLog("收到本机推送，正在导入资料包…");
+  state.lastMessage = "正在导入本机资料包…";
+  const result = await unpackSyncBundle(buf);
+  pushLog(`导入完成：${result.restored.join("、")}`);
+  await saveSettings(config.rootDir, { headless: true });
+  pushLog("已强制开启无头模式，开始发送…");
+  state.lastMessage = "导入完成，开始发送…";
+  void runJob("send").catch(() => undefined);
 }
 
 function lanAddresses(): string[] {
@@ -433,6 +461,98 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    /** 服务器代理：接收资料包并立即发送 */
+    if (req.method === "POST" && pathname === "/api/agent/push-send") {
+      if (state.running) {
+        sendJson(res, 409, { error: `已有任务在运行：${state.running}` });
+        return;
+      }
+      const buf = await readBodyBuffer(req);
+      if (!buf.length) throw new Error("资料包为空");
+      await agentPushAndSend(buf);
+      sendJson(res, 200, { ok: true, started: "send" });
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/agent/state") {
+      sendJson(res, 200, {
+        running: state.running,
+        logs: state.logs.slice(-120),
+        lastMessage: state.lastMessage,
+        ...serverPublicInfo(),
+      });
+      return;
+    }
+
+    /**
+     * 本机控制台：打包当前数据并推送到远程服务器执行发送
+     * （避免浏览器跨域，由本机 Node 代发）
+     */
+    if (req.method === "POST" && pathname === "/api/remote/push-send") {
+      if (config.serverMode) {
+        throw new Error("服务器代理模式不能再向外推送");
+      }
+      const settings = await loadSettings(config.rootDir);
+      const remoteUrl = (settings.remoteServerUrl || "").replace(/\/$/, "");
+      if (!remoteUrl) throw new Error("请先填写远程服务器地址并保存设置");
+      const packed = await packSyncBundle();
+      pushLog(
+        `正在推送到 ${remoteUrl}（${Math.round(packed.buffer.length / 1024)} KB）…`,
+      );
+      const auth = Buffer.from(
+        `${settings.remoteServerUser || "admin"}:${settings.remoteServerPassword || ""}`,
+      ).toString("base64");
+      const resp = await fetch(`${remoteUrl}/api/agent/push-send`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/gzip",
+        },
+        body: packed.buffer,
+      });
+      const text = await resp.text();
+      let data: { ok?: boolean; error?: string; started?: string } = {};
+      try {
+        data = JSON.parse(text) as typeof data;
+      } catch {
+        throw new Error(`远程服务器响应异常 HTTP ${resp.status}: ${text.slice(0, 200)}`);
+      }
+      if (!resp.ok || data.error) {
+        throw new Error(data.error || `远程推送失败 HTTP ${resp.status}`);
+      }
+      pushLog("✓ 已推送到服务器并开始发送。可打开服务器状态页查看日志。");
+      sendJson(res, 200, {
+        ok: true,
+        remote: data,
+        bytes: packed.buffer.length,
+        statusUrl: `${remoteUrl}/`,
+      });
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/remote/state") {
+      if (config.serverMode) {
+        throw new Error("服务器代理模式无远程状态");
+      }
+      const settings = await loadSettings(config.rootDir);
+      const remoteUrl = (settings.remoteServerUrl || "").replace(/\/$/, "");
+      if (!remoteUrl) throw new Error("未配置远程服务器地址");
+      const auth = Buffer.from(
+        `${settings.remoteServerUser || "admin"}:${settings.remoteServerPassword || ""}`,
+      ).toString("base64");
+      const resp = await fetch(`${remoteUrl}/api/agent/state`, {
+        headers: { Authorization: `Basic ${auth}` },
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(
+          (data as { error?: string }).error || `远程状态失败 HTTP ${resp.status}`,
+        );
+      }
+      sendJson(res, 200, { ok: true, remoteUrl, ...(data as object) });
+      return;
+    }
+
     if (req.method === "POST" && pathname === "/api/login/confirm") {
       if (state.loginConfirm) {
         state.loginConfirm();
@@ -480,19 +600,25 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && pathname.startsWith("/api/job/")) {
       const name = pathname.replace("/api/job/", "") as JobName;
-      const allowed: JobName[] = [
-        "login",
-        "login-all",
-        "sync-pages",
-        "detect-fb-pages",
-        "detect-fb-pages-all",
-        "sync-blacklist",
-        "sync-contacts",
-        "send-dry",
-        "send",
-      ];
+      const allowed: JobName[] = config.serverMode
+        ? ["send"]
+        : [
+            "login",
+            "login-all",
+            "sync-pages",
+            "detect-fb-pages",
+            "detect-fb-pages-all",
+            "sync-blacklist",
+            "sync-contacts",
+            "send-dry",
+            "send",
+          ];
       if (!allowed.includes(name)) {
-        sendJson(res, 404, { error: "未知任务" });
+        sendJson(res, 403, {
+          error: config.serverMode
+            ? "服务器仅接受本机推送后的发送，请用本机「推送到服务器并发送」"
+            : "未知任务",
+        });
         return;
       }
       if (state.running) {

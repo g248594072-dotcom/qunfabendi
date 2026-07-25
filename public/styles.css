@@ -468,6 +468,15 @@ button.danger {
   max-width: 820px;
 }
 
+.helper-app .account-add {
+  grid-template-columns: 1fr auto;
+}
+
+.sticky-confirm .primary:not([hidden]) {
+  font-size: 1.05rem;
+  padding: 12px 18px;
+}
+
 .helper-card {
   display: flex;
   flex-direction: column;

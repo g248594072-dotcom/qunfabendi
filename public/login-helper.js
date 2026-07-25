@@ -7,11 +7,22 @@ const els = {
   btnResetJob: document.getElementById("btnResetJob"),
   novncPanel: document.getElementById("novncPanel"),
   novncLink: document.getElementById("novncLink"),
-  profileFile: document.getElementById("profileFile"),
-  serverHint: document.getElementById("serverHint"),
+  newAccountName: document.getElementById("newAccountName"),
+  btnAddAccount: document.getElementById("btnAddAccount"),
+  proxyModal: document.getElementById("proxyModal"),
+  proxyModalTitle: document.getElementById("proxyModalTitle"),
+  proxyProtocol: document.getElementById("proxyProtocol"),
+  proxyHost: document.getElementById("proxyHost"),
+  proxyPort: document.getElementById("proxyPort"),
+  proxyUser: document.getElementById("proxyUser"),
+  proxyPass: document.getElementById("proxyPass"),
+  proxyPreview: document.getElementById("proxyPreview"),
+  btnProxySave: document.getElementById("btnProxySave"),
+  btnProxyClear: document.getElementById("btnProxyClear"),
 };
 
-let uploadTargetId = "";
+let proxyEditAccountId = "";
+let lastAccounts = [];
 
 function escapeHtml(s) {
   return String(s || "")
@@ -49,7 +60,7 @@ function parseProxyStructured(proxy) {
 function proxyTableHtml(proxy) {
   const s = parseProxyStructured(proxy);
   if (!s) {
-    return `<p class="warn" style="margin:0">未设置代理（直连）。请让管理员先配置独立 IP。</p>`;
+    return `<p class="warn" style="margin:0">尚未设置代理 IP，请先点「设置代理 IP」。</p>`;
   }
   return `<table class="proxy-table">
     <tr><th>协议</th><td><code>${escapeHtml(s.protocol)}</code></td></tr>
@@ -60,8 +71,70 @@ function proxyTableHtml(proxy) {
   </table>`;
 }
 
+function updateProxyPreview() {
+  if (!els.proxyPreview) return;
+  const protocol = els.proxyProtocol?.value || "socks5";
+  const host = (els.proxyHost?.value || "").trim();
+  const port = (els.proxyPort?.value || "").trim();
+  const user = (els.proxyUser?.value || "").trim();
+  if (!host || !port) {
+    els.proxyPreview.textContent = "预览：请填写服务器地址与端口";
+    return;
+  }
+  els.proxyPreview.textContent = `预览：${protocol}://${host}:${port}${
+    user ? " · 账号 " + user : ""
+  }`;
+}
+
+function openProxyModal(accountId, current, accountName) {
+  proxyEditAccountId = accountId;
+  const s = parseProxyStructured(current);
+  if (els.proxyModalTitle) {
+    els.proxyModalTitle.textContent = `设置代理 IP · ${accountName || accountId}`;
+  }
+  if (els.proxyProtocol) els.proxyProtocol.value = s?.protocol || "socks5";
+  if (els.proxyHost) els.proxyHost.value = s?.host || "";
+  if (els.proxyPort) els.proxyPort.value = s?.port ? String(s.port) : "";
+  if (els.proxyUser) els.proxyUser.value = s?.username || current?.username || "";
+  if (els.proxyPass) els.proxyPass.value = s?.password || current?.password || "";
+  updateProxyPreview();
+  if (els.proxyModal) els.proxyModal.hidden = false;
+}
+
+function closeProxyModal() {
+  proxyEditAccountId = "";
+  if (els.proxyModal) els.proxyModal.hidden = true;
+}
+
+function collectStructuredProxy() {
+  const host = (els.proxyHost?.value || "").trim();
+  const port = Number(els.proxyPort?.value);
+  if (!host || !Number.isFinite(port) || port <= 0) {
+    throw new Error("请填写服务器地址和有效端口");
+  }
+  return {
+    protocol: els.proxyProtocol?.value || "socks5",
+    host,
+    port: Math.floor(port),
+    username: (els.proxyUser?.value || "").trim() || undefined,
+    password: (els.proxyPass?.value || "").trim() || undefined,
+  };
+}
+
+async function postAccounts(body) {
+  const res = await fetch("/api/accounts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 function renderAccounts(accountsFile, state) {
   const accounts = accountsFile?.accounts || [];
+  lastAccounts = accounts;
   if (els.emptyHint) els.emptyHint.hidden = accounts.length > 0;
   if (!els.accountList) return;
   if (!accounts.length) {
@@ -70,53 +143,43 @@ function renderAccounts(accountsFile, state) {
   }
   const targetId = state.loginTargetAccountId || "";
   const running = state.running;
-  const canOpenBrowser = Boolean(state.novncUrl || state.hasDisplay);
   els.accountList.innerHTML = accounts
     .map((a) => {
       const status = a.loginStatus === "logged_in" ? "logged_in" : "pending";
-      const statusLabel = status === "logged_in" ? "已登录" : "待登录";
+      const statusLabel = status === "logged_in" ? "已登录（已保存）" : "待登录";
       const isTarget = targetId === a.id && running === "login";
-      const assignee = a.assignee
-        ? `<span class="note">负责人：${escapeHtml(a.assignee)}</span>`
-        : "";
+      const hasProxy = Boolean(parseProxyStructured(a.proxy));
       const last = a.lastLoginAt
-        ? `<span class="note">上次确认：${escapeHtml(
+        ? `<span class="note">保存时间：${escapeHtml(
             new Date(a.lastLoginAt).toLocaleString(),
           )}</span>`
         : "";
-      const openDisabled = running || !canOpenBrowser ? "disabled" : "";
+      const loginDisabled = running || !hasProxy ? "disabled" : "";
       return `<div class="helper-card ${isTarget ? "busy" : ""}" data-id="${escapeHtml(a.id)}">
         <div class="helper-card-top">
           <div>
             <h3>${escapeHtml(a.name)}
               <span class="login-status ${status}">${statusLabel}</span>
             </h3>
-            ${assignee}
             ${last}
           </div>
         </div>
         ${proxyTableHtml(a.proxy)}
         <div class="helper-actions">
-          <button type="button" class="primary" data-login="${escapeHtml(a.id)}" ${openDisabled}>
+          <button type="button" data-proxy="${escapeHtml(a.id)}" ${running ? "disabled" : ""}>
+            设置代理 IP
+          </button>
+          <button type="button" class="primary" data-login="${escapeHtml(a.id)}" ${loginDisabled}>
             打开登录
           </button>
-          <button type="button" data-upload="${escapeHtml(a.id)}" ${running ? "disabled" : ""}>
-            上传资料包
+          <button type="button" data-rename="${escapeHtml(a.id)}" ${running ? "disabled" : ""}>
+            改名
           </button>
-          <a class="button-link" href="/api/accounts/${encodeURIComponent(a.id)}/profile">
-            导出资料包
-          </a>
-          <button type="button" data-mark-pending="${escapeHtml(a.id)}" ${
-            running ? "disabled" : ""
-          }>标为待登录</button>
-          <button type="button" data-mark-done="${escapeHtml(a.id)}" ${
-            running ? "disabled" : ""
-          }>手动标已登录</button>
         </div>
         ${
-          !canOpenBrowser
-            ? `<p class="note">当前服务器无图形界面：请用「上传资料包」，或部署 Docker（含 noVNC）。</p>`
-            : ""
+          !hasProxy
+            ? `<p class="note">请先设置代理 IP，再打开登录（每个号用独立出口）。</p>`
+            : `<p class="note">登录完成后点上方绿色「确认已登录」，信息会保存在服务器。</p>`
         }
       </div>`;
     })
@@ -161,6 +224,11 @@ async function refresh() {
 }
 
 async function startLogin(accountId) {
+  const acc = lastAccounts.find((a) => a.id === accountId);
+  if (!parseProxyStructured(acc?.proxy)) {
+    alert("请先设置代理 IP");
+    return;
+  }
   if (els.novncLink?.href && els.novncLink.href !== "#") {
     window.open(els.novncLink.href, "_blank", "noopener");
   }
@@ -174,44 +242,38 @@ async function startLogin(accountId) {
   await refresh();
 }
 
-async function uploadProfile(accountId, file) {
-  const res = await fetch(`/api/accounts/${encodeURIComponent(accountId)}/profile`, {
-    method: "POST",
-    headers: { "Content-Type": "application/gzip" },
-    body: file,
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  alert("资料包已导入，该账号已标为已登录。");
-  await refresh();
-}
+els.btnAddAccount?.addEventListener("click", async () => {
+  try {
+    const name = (els.newAccountName?.value || "").trim();
+    await postAccounts({ action: "add", name });
+    if (els.newAccountName) els.newAccountName.value = "";
+    await refresh();
+  } catch (err) {
+    alert(err instanceof Error ? err.message : String(err));
+  }
+});
+
+els.newAccountName?.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") els.btnAddAccount?.click();
+});
 
 els.accountList?.addEventListener("click", async (ev) => {
-  const btn = ev.target?.closest?.("button, a");
-  if (!btn || btn.tagName === "A") return;
+  const btn = ev.target?.closest?.("button");
+  if (!btn) return;
   const loginId = btn.getAttribute("data-login");
-  const pendingId = btn.getAttribute("data-mark-pending");
-  const doneId = btn.getAttribute("data-mark-done");
-  const uploadId = btn.getAttribute("data-upload");
+  const proxyId = btn.getAttribute("data-proxy");
+  const renameId = btn.getAttribute("data-rename");
   try {
     if (loginId) {
       await startLogin(loginId);
-    } else if (uploadId) {
-      uploadTargetId = uploadId;
-      els.profileFile?.click();
-    } else if (pendingId) {
-      await fetch("/api/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "markPending", id: pendingId }),
-      });
-      await refresh();
-    } else if (doneId) {
-      await fetch("/api/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "markLoggedIn", id: doneId }),
-      });
+    } else if (proxyId) {
+      const acc = lastAccounts.find((a) => a.id === proxyId);
+      openProxyModal(proxyId, acc?.proxy, acc?.name);
+    } else if (renameId) {
+      const acc = lastAccounts.find((a) => a.id === renameId);
+      const name = prompt("新名称", acc?.name || "");
+      if (!name) return;
+      await postAccounts({ action: "rename", id: renameId, name });
       await refresh();
     }
   } catch (err) {
@@ -219,23 +281,51 @@ els.accountList?.addEventListener("click", async (ev) => {
   }
 });
 
-els.profileFile?.addEventListener("change", async () => {
-  const file = els.profileFile.files?.[0];
-  const id = uploadTargetId;
-  uploadTargetId = "";
-  if (!file || !id) return;
+["proxyProtocol", "proxyHost", "proxyPort", "proxyUser", "proxyPass"].forEach((id) => {
+  els[id]?.addEventListener("input", updateProxyPreview);
+  els[id]?.addEventListener("change", updateProxyPreview);
+});
+
+els.proxyModal?.addEventListener("click", (ev) => {
+  if (ev.target?.closest?.("[data-close-proxy]")) closeProxyModal();
+});
+
+els.btnProxySave?.addEventListener("click", async () => {
+  if (!proxyEditAccountId) return;
   try {
-    await uploadProfile(id, file);
+    const structuredProxy = collectStructuredProxy();
+    await postAccounts({
+      action: "setProxy",
+      id: proxyEditAccountId,
+      structuredProxy,
+    });
+    closeProxyModal();
+    await refresh();
   } catch (err) {
     alert(err instanceof Error ? err.message : String(err));
-  } finally {
-    els.profileFile.value = "";
+  }
+});
+
+els.btnProxyClear?.addEventListener("click", async () => {
+  if (!proxyEditAccountId) return;
+  if (!confirm("清除该账号代理，改为直连？")) return;
+  try {
+    await postAccounts({
+      action: "setProxy",
+      id: proxyEditAccountId,
+      proxy: null,
+    });
+    closeProxyModal();
+    await refresh();
+  } catch (err) {
+    alert(err instanceof Error ? err.message : String(err));
   }
 });
 
 els.btnLoginConfirm?.addEventListener("click", async () => {
   await fetch("/api/login/confirm", { method: "POST" });
   await refresh();
+  alert("已确认，登录信息已保存在服务器。");
 });
 
 els.btnResetJob?.addEventListener("click", async () => {

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>主页群发控制台</title>
+    <link rel="stylesheet" href="/styles.css?v=13" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div>
+          <h1>主页群发控制台</h1>
+          <p class="sub">本地调试 · SaleSmartly 拉客 · Facebook 网页发送</p>
+        </div>
+        <div class="status" id="runStatus">空闲</div>
+      </header>
+
+      <section class="hint">
+        <strong>流程：</strong>添加多个 Facebook 账号（各用独立浏览器资料夹，类似 Chrome
+        个人资料）→ 登录全部 / 探测全部并汇总主页 → 勾选可管理页 → 更新黑名单 →
+        同步客户 → 发送（按主页所属账号自动开对应浏览器）。<br />
+        黑名单标签：<code id="tagList"></code> · 键：
+        <code>page_id + 客户名</code>
+      </section>
+
+      <section class="panel">
+        <h2>0. Facebook 账号（多资料夹）</h2>
+        <p class="note">
+          每个账号对应独立资料夹（类似 Chrome 个人资料）。需要换 IP 时在账号旁点「代理IP」设置；登录/探测/发送都会走该账号代理。
+        </p>
+        <div id="accountList" class="account-list"></div>
+        <div class="row account-add">
+          <label>
+            新账号名称
+            <input id="newAccountName" type="text" placeholder="例如 out / 高炎" />
+          </label>
+          <div class="account-add-actions">
+            <button type="button" id="btnAddAccount" class="primary">添加账号</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid">
+        <section class="panel">
+          <h2>1. 发送设置</h2>
+          <label>
+            消息正文
+            <textarea id="messageText" rows="4"></textarea>
+          </label>
+          <label>
+            图片路径（可空，相对项目根目录）
+            <input id="messageImage" type="text" placeholder="./assets/xxx.png" />
+          </label>
+          <div class="row">
+            <label>
+              间隔最小（秒）
+              <input id="delayMinSec" type="number" min="0" step="1" />
+            </label>
+            <label>
+              间隔最大（秒）
+              <input id="delayMaxSec" type="number" min="0" step="1" />
+            </label>
+            <label>
+              每页最多发送
+              <input id="maxSendPerPage" type="number" min="0" step="1" />
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              同步客户天数
+              <input id="contactDays" type="number" min="1" step="1" />
+            </label>
+            <label class="check">
+              <input id="headless" type="checkbox" />
+              无头模式（服务器用；本地调试请勿勾选）
+            </label>
+          </div>
+          <button id="btnSave" class="primary" type="button">保存设置</button>
+          <p class="note" id="saveMsg"></p>
+        </section>
+
+        <section class="panel">
+          <h2>2. 主页分栏</h2>
+          <p class="note" id="fbDetectHint">
+            探测时请打开「企业资产 / สินทรัพย์ธุรกิจ」右侧那一列主页（第一张图那种），不要打开个人资料面板。
+          </p>
+          <div class="page-actions">
+            <button type="button" id="btnSelectAllAccessible">
+              全选可管理
+            </button>
+            <button type="button" id="btnSelectNone">全不选</button>
+          </div>
+          <div class="split">
+            <div>
+              <h3 class="ok-title">可管且 Sale 已接入（可勾选，旁注所属账号）</h3>
+              <div id="pageListAccessible" class="page-list"></div>
+            </div>
+            <div>
+              <h3 class="bad-title">Sale 有但当前 Facebook 管不到（需换号）</h3>
+              <div id="pageListUnavailable" class="page-list muted-list"></div>
+            </div>
+          </div>
+          <div id="pageListUnknownWrap" hidden>
+            <h3 class="warn-title">尚未探测</h3>
+            <div id="pageListUnknown" class="page-list"></div>
+          </div>
+          <p class="note">
+            本地客户：<span id="contactTotal">0</span> · 勾选可发：
+            <span id="sendableTotal">0</span> · 黑名单：
+            <span id="blacklistCount">0</span>
+            <span id="blacklistUpdated"></span>
+          </p>
+          <p class="warn" id="ssWarn" hidden>
+            尚未配置 SaleSmartly：请在 `.env` 填入 PROJECT_ID 与 API_TOKEN。
+          </p>
+        </section>
+      </div>
+
+      <section class="panel">
+        <h2>3. 操作</h2>
+        <div class="actions">
+          <button type="button" data-job="login">① 登录当前账号</button>
+          <button type="button" data-job="login-all" class="accent">
+            ①′ 登录全部（多开浏览器）
+          </button>
+          <button type="button" id="btnLoginConfirm" class="accent" hidden>
+            确认已登录
+          </button>
+          <button type="button" id="btnDetectConfirm" class="accent" hidden>
+            确认已打开企业资产列表
+          </button>
+          <button type="button" id="btnResetJob" class="danger">
+            解除卡住
+          </button>
+          <button type="button" data-job="sync-pages">② 同步 Sale 主页</button>
+          <button type="button" data-job="detect-fb-pages">
+            探测当前账号
+          </button>
+          <button type="button" data-job="detect-fb-pages-all" class="accent">
+            探测全部账号（多开并汇总）
+          </button>
+          <button type="button" data-job="sync-blacklist">③ 更新黑名单</button>
+          <button type="button" data-job="sync-contacts">④ 同步发送客户</button>
+          <button type="button" data-job="send-dry" class="primary">
+            ⑤ 只定位不发送
+          </button>
+          <button type="button" data-job="send" class="danger">
+            ⑥ 真正发送
+          </button>
+        </div>
+      </section>
+
+      <div class="grid">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>运行日志</h2>
+            <button type="button" id="btn-copy-logs" class="btn-mini">一键复制全部</button>
+          </div>
+          <pre id="logs" class="logs"></pre>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>最近发送结果</h2>
+            <button type="button" id="btn-copy-results" class="btn-mini">一键复制全部</button>
+          </div>
+          <div id="results" class="results"></div>
+        </section>
+      </div>
+    </div>
+    <script src="/app.js?v=12"></script>
+  </body>
+</html>

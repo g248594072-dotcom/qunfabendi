@@ -1,0 +1,22 @@
+node_modules/
+dist/
+
+# 密钥（切勿外发）
+.env
+
+# 浏览器登录态 / Cookie（含 Facebook 登录，切勿外发）
+storage/browser-profile/
+storage/profiles/
+storage/logs/
+
+# 本地数据（含客户个人信息、账号、发送记录，切勿外发）
+data/pages.json
+data/contacts.json
+data/fb-session-pages.json
+data/blacklist.json
+data/send-results.jsonl
+data/settings.json
+data/accounts.json
+
+*.log
+.DS_Store

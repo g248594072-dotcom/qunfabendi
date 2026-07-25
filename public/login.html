@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Facebook 登录助手</title>
-    <link rel="stylesheet" href="/styles.css?v=16" />
+    <link rel="stylesheet" href="/styles.css?v=18" />
   </head>
   <body>
     <div class="app helper-app">
@@ -59,7 +59,10 @@
       </section>
 
       <section class="panel">
-        <h2>运行日志</h2>
+        <div class="panel-head">
+          <h2>运行日志</h2>
+          <button type="button" id="btnCopyLogs" class="btn-mini">一键复制</button>
+        </div>
         <pre id="logs" class="logs"></pre>
       </section>
     </div>
@@ -104,6 +107,6 @@
       </div>
     </div>
 
-    <script src="/login-helper.js?v=17"></script>
+    <script src="/login-helper.js?v=18"></script>
   </body>
 </html>

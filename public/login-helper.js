@@ -19,6 +19,7 @@ const els = {
   proxyPreview: document.getElementById("proxyPreview"),
   btnProxySave: document.getElementById("btnProxySave"),
   btnProxyClear: document.getElementById("btnProxyClear"),
+  btnCopyLogs: document.getElementById("btnCopyLogs"),
 };
 
 let proxyEditAccountId = "";
@@ -322,6 +323,31 @@ els.btnLoginConfirm?.addEventListener("click", async () => {
 els.btnResetJob?.addEventListener("click", async () => {
   await fetch("/api/job/reset", { method: "POST" });
   await refresh();
+});
+
+async function copyText(text, btn) {
+  const value = (text || "").trim() || "(空)";
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  if (btn) {
+    const old = btn.textContent;
+    btn.textContent = "已复制";
+    setTimeout(() => {
+      btn.textContent = old;
+    }, 1200);
+  }
+}
+
+els.btnCopyLogs?.addEventListener("click", () => {
+  copyText(els.logs?.textContent || "", els.btnCopyLogs);
 });
 
 refresh();

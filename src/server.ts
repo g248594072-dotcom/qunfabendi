@@ -17,6 +17,11 @@ import { checkBasicAuth } from "./auth.js";
 import type { ProxyConfig } from "./proxy.js";
 import { buildProxyFromStructured, type StructuredProxy } from "./proxy.js";
 import { config } from "./config.js";
+import {
+  isNovncPath,
+  proxyNovncHttp,
+  proxyNovncUpgrade,
+} from "./novnc-proxy.js";
 import { packAccountProfile, unpackAccountProfile } from "./profile-pack.js";
 import { saveSettings, type AppSettings } from "./settings.js";
 import {
@@ -31,6 +36,9 @@ import {
   jobSyncPages,
 } from "./jobs.js";
 
+const DEFAULT_NOVNC_PATH =
+  "/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify";
+
 async function readBodyBuffer(req: http.IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -43,7 +51,8 @@ function serverPublicInfo() {
   return {
     serverMode: config.serverMode,
     authRequired: Boolean(config.uiPassword),
-    novncUrl: config.novncUrl,
+    // 同源反代，无需再在 1Panel 单独配 6080
+    novncUrl: config.novncUrl || DEFAULT_NOVNC_PATH,
     loginHelperPath: "/login.html",
     hasDisplay: Boolean(process.env.DISPLAY),
   };
@@ -265,6 +274,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (!checkBasicAuth(req, res)) return;
+
+    // 把 /novnc/* 与 /websockify 转到容器内 6080（1Panel 只需反代 3789）
+    if (isNovncPath(pathname)) {
+      proxyNovncHttp(req, res, pathname, url.search);
+      return;
+    }
 
     if (req.method === "GET" && pathname === "/api/state") {
       const dash = await getDashboardState();
@@ -491,10 +506,47 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+server.on("upgrade", (req, socket, head) => {
+  try {
+    const url = new URL(req.url || "/", "http://localhost");
+    if (!isNovncPath(url.pathname)) {
+      socket.destroy();
+      return;
+    }
+    // WebSocket 也走同一套 Basic 认证（浏览器通常会带上已保存的账号密码）
+    if (config.uiPassword) {
+      const header = String(req.headers.authorization || "");
+      let ok = false;
+      if (header.startsWith("Basic ")) {
+        try {
+          const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
+          const i = decoded.indexOf(":");
+          const user = i >= 0 ? decoded.slice(0, i) : decoded;
+          const pass = i >= 0 ? decoded.slice(i + 1) : "";
+          ok = user === config.uiUser && pass === config.uiPassword;
+        } catch {
+          ok = false;
+        }
+      }
+      if (!ok) {
+        socket.write(
+          "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"FB Broadcast\"\r\nConnection: close\r\n\r\n",
+        );
+        socket.destroy();
+        return;
+      }
+    }
+    proxyNovncUpgrade(req, socket, head);
+  } catch {
+    socket.destroy();
+  }
+});
+
 server.listen(config.uiPort, config.uiHost, () => {
   const host = config.uiHost;
   console.log(`可视化控制台已启动: http://127.0.0.1:${config.uiPort}`);
   console.log(`登录助手: http://127.0.0.1:${config.uiPort}/login.html`);
+  console.log(`远程浏览器: ${config.novncUrl || DEFAULT_NOVNC_PATH}`);
   if (config.uiPassword) {
     console.log(`已启用访问密码（用户 ${config.uiUser}）`);
   } else if (host === "0.0.0.0") {
@@ -509,12 +561,9 @@ server.listen(config.uiPort, config.uiHost, () => {
   } else if (host !== "127.0.0.1") {
     console.log(`监听 ${host}:${config.uiPort}`);
   }
-  if (config.novncUrl) {
-    console.log(`远程浏览器桌面(noVNC): ${config.novncUrl}`);
-  }
   if (config.serverMode && !process.env.DISPLAY) {
     console.log(
-      "提示：当前无 DISPLAY。发送请勾选无头模式；登录请用「上传资料包」或 Docker/noVNC 方案。",
+      "提示：当前无 DISPLAY。发送请勾选无头模式；登录走 Docker/noVNC。",
     );
   }
   console.log("Ctrl+C 结束。");

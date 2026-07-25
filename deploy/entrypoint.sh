@@ -32,7 +32,7 @@ echo "[entrypoint] start noVNC :${NOVNC_PORT}"
 websockify --web="${NOVNC_WEB}" "0.0.0.0:${NOVNC_PORT}" "localhost:5900" >/tmp/novnc.log 2>&1 &
 
 if [[ -z "${NOVNC_URL:-}" ]]; then
-  export NOVNC_URL="http://127.0.0.1:${NOVNC_PORT}/vnc.html?autoconnect=1&resize=remote"
+  export NOVNC_URL="/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify"
 fi
 
 echo "[entrypoint] start UI UI_HOST=${UI_HOST:-0.0.0.0} UI_PORT=${UI_PORT:-3789}"

@@ -15,7 +15,7 @@ services:
       SERVER_MODE: "1"
       DISPLAY: ":99"
       NOVNC_PORT: "6080"
-      NOVNC_URL: "${NOVNC_URL:-https://qunfa.guanligongju.vip/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify}"
+      NOVNC_URL: "${NOVNC_URL:-/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify}"
     volumes:
       - ./data:/app/data
       - ./storage:/app/storage

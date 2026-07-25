@@ -1,28 +1,47 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 
 echo ========================================
-echo   Facebook 登录助手（给协助登录的人用）
+echo   Facebook Login Helper
 echo ========================================
 echo.
-echo 1. 添加账号 / 设置代理 IP
-echo 2. 打开登录，在弹出的浏览器里登 Facebook
-echo 3. 点「确认已登录」
-echo 4. 点「导出给主控」，把下载的文件发回负责人
+echo 1. Add account / set proxy IP
+echo 2. Click Open Login, login in Chrome popup
+echo 3. Click Confirm Logged In
+echo 4. Click Export, send the file back
+echo.
+echo Open: http://127.0.0.1:3789/login.html
+echo Stop: Ctrl+C in this window
 echo.
 
+where node >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] Node.js not found. Install Node.js 20+ then retry.
+  pause
+  exit /b 1
+)
+
+echo Free port 3789 if busy...
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":3789" ^| findstr "LISTENING"') do (
+  echo Kill PID=%%a
+  taskkill /F /PID %%a >nul 2>&1
+)
+
 if not exist "node_modules\" (
-  echo 首次使用，正在安装依赖…
+  echo First run: npm install...
   call npm install
   if errorlevel 1 (
-    echo 安装失败，请先安装 Node.js 20+
+    echo [ERROR] npm install failed
     pause
     exit /b 1
   )
 )
 
 set HELPER_ONLY=1
+echo Starting login helper...
 start "" "http://127.0.0.1:3789/login.html"
 call npx tsx src/server.ts
+
+echo.
+echo Server stopped.
 pause

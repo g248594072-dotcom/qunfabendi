@@ -508,7 +508,7 @@ const server = http.createServer(async (req, res) => {
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/gzip",
         },
-        body: packed.buffer,
+        body: new Uint8Array(packed.buffer),
       });
       const text = await resp.text();
       let data: { ok?: boolean; error?: string; started?: string } = {};

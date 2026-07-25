@@ -397,6 +397,12 @@ async function refresh() {
     if (els.serverModeHint) {
       els.serverModeHint.hidden = !data.serverMode;
     }
+    const opsLocal = document.getElementById("opsLocalJobs");
+    const opsLocalHint = document.getElementById("opsLocalHint");
+    const opsServerHint = document.getElementById("opsServerHint");
+    if (opsLocal) opsLocal.hidden = Boolean(data.serverMode);
+    if (opsLocalHint) opsLocalHint.hidden = Boolean(data.serverMode);
+    if (opsServerHint) opsServerHint.hidden = !data.serverMode;
 
     if (!settingsHydrated) {
       fillSettings(data.settings);

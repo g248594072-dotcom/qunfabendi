@@ -141,9 +141,17 @@
 
       <section class="panel">
         <h2>3. 操作</h2>
-        <div class="actions">
-          <button type="button" data-job="login">① 登录当前账号</button>
-          <button type="button" data-job="login-all" class="accent">
+        <p class="note" id="opsLocalHint">
+          ①～⑤ 在<strong>本机</strong>完成；导出资料包后，服务器只做⑥发送。
+        </p>
+        <p class="note" id="opsServerHint" hidden>
+          服务器模式：请先「一键导入」本机资料包，勾选无头并保存，再点⑥发送。①～⑤请在本机操作。
+        </p>
+        <div class="actions" id="opsLocalJobs">
+          <button type="button" data-job="login" data-local-only>
+            ① 登录当前账号
+          </button>
+          <button type="button" data-job="login-all" class="accent" data-local-only>
             ①′ 登录全部（多开浏览器）
           </button>
           <button type="button" id="btnLoginConfirm" class="accent" hidden>
@@ -152,23 +160,31 @@
           <button type="button" id="btnDetectConfirm" class="accent" hidden>
             确认已打开企业资产列表
           </button>
+          <button type="button" data-job="sync-pages" data-local-only>
+            ② 同步 Sale 主页
+          </button>
+          <button type="button" data-job="detect-fb-pages" data-local-only>
+            探测当前账号
+          </button>
+          <button type="button" data-job="detect-fb-pages-all" class="accent" data-local-only>
+            探测全部账号（多开并汇总）
+          </button>
+          <button type="button" data-job="sync-blacklist" data-local-only>
+            ③ 更新黑名单
+          </button>
+          <button type="button" data-job="sync-contacts" data-local-only>
+            ④ 同步发送客户
+          </button>
+          <button type="button" data-job="send-dry" class="primary" data-local-only>
+            ⑤ 只定位不发送
+          </button>
+        </div>
+        <div class="actions" style="margin-top: 10px">
           <button type="button" id="btnResetJob" class="danger">
             解除卡住
           </button>
-          <button type="button" data-job="sync-pages">② 同步 Sale 主页</button>
-          <button type="button" data-job="detect-fb-pages">
-            探测当前账号
-          </button>
-          <button type="button" data-job="detect-fb-pages-all" class="accent">
-            探测全部账号（多开并汇总）
-          </button>
-          <button type="button" data-job="sync-blacklist">③ 更新黑名单</button>
-          <button type="button" data-job="sync-contacts">④ 同步发送客户</button>
-          <button type="button" data-job="send-dry" class="primary">
-            ⑤ 只定位不发送
-          </button>
           <button type="button" data-job="send" class="danger">
-            ⑥ 真正发送
+            ⑥ 真正发送（可在服务器）
           </button>
         </div>
       </section>
@@ -231,6 +247,6 @@
       </div>
     </div>
 
-    <script src="/app.js?v=19"></script>
+    <script src="/app.js?v=20"></script>
   </body>
 </html>

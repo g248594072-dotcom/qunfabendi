@@ -30,8 +30,8 @@ fi
 
 echo ""
 echo "完成。访问："
-echo "  控制台:     http://107.175.246.246/"
-echo "  登录助手:   http://107.175.246.246/login.html"
-echo "  远程浏览器: http://107.175.246.246/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify"
+echo "  控制台:     https://qunfa.guanligongju.vip/"
+echo "  登录助手:   https://qunfa.guanligongju.vip/login.html"
+echo "  远程浏览器: https://qunfa.guanligongju.vip/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify"
 echo ""
-echo "有域名时：改 nginx server_name + .env 里 NOVNC_URL，再 certbot 上 HTTPS。"
+echo "若用 1Panel 反代：反代地址填 127.0.0.1:3789；noVNC 另配 /novnc/ → 127.0.0.1:6080"

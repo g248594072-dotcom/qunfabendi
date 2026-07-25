@@ -1,7 +1,5 @@
-# 有域名时用这份（把 your.domain.com 换成真实域名）
-# HTTPS 建议用 certbot：
-#   apt install certbot python3-certbot-nginx
-#   certbot --nginx -d your.domain.com
+# 备用：自建 nginx（一般用 1Panel 反代即可，不必用这份）
+# 域名：qunfa.guanligongju.vip
 
 upstream fb_ui {
     server 127.0.0.1:3789;
@@ -14,7 +12,7 @@ upstream fb_novnc {
 server {
     listen 80;
     listen [::]:80;
-    server_name your.domain.com;
+    server_name qunfa.guanligongju.vip;
 
     location / {
         proxy_pass http://fb_ui;

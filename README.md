@@ -8,7 +8,7 @@
 
 ## 服务器部署（推荐 Docker + Nginx）
 
-当前示例服务器：`http://107.175.246.246/`（已有 nginx；应用经反代挂到 80 端口）。
+正式域名：[`https://qunfa.guanligongju.vip`](https://qunfa.guanligongju.vip)（1Panel / nginx 反代到本机 `127.0.0.1:3789`）。
 
 适合：控制台跑在云上，每账号独立代理 IP；登录交给他人（noVNC 远程操作，或上传资料包）。
 
@@ -33,33 +33,33 @@ UI_HOST=0.0.0.0
 SERVER_MODE=1
 UI_USER=admin
 UI_PASSWORD=改成强密码
-NOVNC_URL=http://107.175.246.246/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify
+NOVNC_URL=https://qunfa.guanligongju.vip/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify
 ```
 
-### 3. 一键启动（Docker + 写入 nginx）
+### 3. 启动 Docker + 1Panel 反代
 
 ```bash
-bash deploy/apply-on-server.sh
-docker compose logs -f
+docker compose up -d --build
+# 或：bash deploy/apply-on-server.sh
 ```
 
-访问（走 80，不必再记 3789）：
+1Panel 网站反代：
+
+| 项 | 值 |
+| --- | --- |
+| 域名 | `qunfa.guanligongju.vip` |
+| 反代地址 | `127.0.0.1:3789` |
+| HTTPS | 开启 |
+
+访问：
 
 | 地址 | 用途 |
 | --- | --- |
-| http://107.175.246.246/ | 主控制台 |
-| http://107.175.246.246/login.html | 登录助手（交给他人） |
-| http://107.175.246.246/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify | 远程浏览器 |
+| https://qunfa.guanligongju.vip/ | 主控制台 |
+| https://qunfa.guanligongju.vip/login.html | 登录助手 |
+| https://qunfa.guanligongju.vip/novnc/... | 远程浏览器（需另配 `/novnc/` → `127.0.0.1:6080`） |
 
 浏览器会弹出 Basic 认证，账号密码即 `UI_USER` / `UI_PASSWORD`。
-
-### 绑定你的域名
-
-1. DNS：A 记录指向 `107.175.246.246`
-2. 改 nginx：`server_name 你的域名;`（可参考 `deploy/nginx-fb-domain.conf.example`）
-3. 改 `.env` 里 `NOVNC_URL` 为 `http://你的域名/novnc/...`
-4. `nginx -t && systemctl reload nginx`
-5. （可选 HTTPS）`certbot --nginx -d 你的域名`
 
 ### 4. 服务器上的推荐流程
 

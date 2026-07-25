@@ -52,5 +52,5 @@ fi
 
 echo ""
 echo "✓ 更新完成"
-echo "  控制台: http://107.175.246.246/"
-echo "  登录助手: http://107.175.246.246/login.html"
+echo "  控制台: https://qunfa.guanligongju.vip/"
+echo "  登录助手: https://qunfa.guanligongju.vip/login.html"
